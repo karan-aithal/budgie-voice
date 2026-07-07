@@ -19,7 +19,7 @@ vad:
 
 stt:
   mode: "realtime"        # "realtime" (live word-by-word) | "batch" (wait for silence)
-  model: "medium"          # accuracy model: tiny | small | medium | large-v3
+  model: "small"          # accuracy model: tiny | small | medium | large-v3
   realtime_model: "tiny"  # fast model used for live word confirmation (realtime mode)
   device: "cpu"          # "auto" | "cpu" | "cuda"
   compute_type: "int8"

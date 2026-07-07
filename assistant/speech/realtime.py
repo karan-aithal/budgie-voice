@@ -179,7 +179,7 @@ class RealtimeSpeechRecognizer:
                 post_speech_silence_duration=vad.speech_pad_ms / 1000.0,
 
                 # Speed / quality
-                fast_sentence_end=True,
+                # fast_sentence_end=True,
                 min_length_of_recording=0.3,
                 min_gap_between_recordings=0.0,
 
