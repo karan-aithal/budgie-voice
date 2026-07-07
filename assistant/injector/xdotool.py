@@ -21,7 +21,6 @@ logger = logging.getLogger(__name__)
 # Punctuation command map & substitution regex
 # ---------------------------------------------------------------------------
 
-# Ordered longest-first so multi-word keys are tried before short ones.
 _COMMAND_MAP: Final[dict[str, str]] = {
     "new paragraph": "\n\n",
     "new line": "\n",
@@ -33,39 +32,57 @@ _COMMAND_MAP: Final[dict[str, str]] = {
     "period": ".",
 }
 
+# Commands that are almost never used as ordinary English words → always
+# replace at a simple word boundary.
+_LOOSE_COMMANDS: Final[frozenset[str]] = frozenset(_COMMAND_MAP) - {"period"}
 
-def _build_subst_re() -> re.Pattern[str]:
-    """Compile the punctuation-command substitution pattern.
+# "period" is a common English noun ("my period is late") → only replace at
+# a phrase boundary: end-of-string, before another command, or before a
+# capitalised word (Whisper capitalises the first word of a new sentence).
+_STRICT_COMMANDS: Final[frozenset[str]] = {"period"}
 
-    A command word/phrase is substituted **only** at a phrase boundary:
 
-    * end of string ($)
-    * immediately before another command word
-    * immediately before a capitalised / digit-starting word
-      (Whisper capitalises the first word of a new sentence)
-
-    This prevents ``"My period is late"`` → ``"My . is late"``.
-    """
-    # Longest-first so "new paragraph" matches before "new" (prefix safety)
+def _make_loose_re() -> re.Pattern[str]:
+    """``new line``, ``comma``, quotes, etc. — replace wherever they appear."""
     alts = "|".join(
+        re.escape(k) for k in sorted(_LOOSE_COMMANDS, key=len, reverse=True)
+    )
+    return re.compile(rf"(?:^|\s+)({alts})\b", re.IGNORECASE)
+
+
+def _make_strict_re() -> re.Pattern[str]:
+    """``period`` — replace only at a phrase boundary.
+
+    ``(?-i:[A-Z])`` disables IGNORECASE inside that group so only a genuine
+    capital letter (start of a new Whisper sentence) triggers the match.
+    """
+    all_alts = "|".join(
         re.escape(k) for k in sorted(_COMMAND_MAP, key=len, reverse=True)
     )
-    lookahead = rf"(?=\s+(?:{alts})\b|\s+[A-Z\d]|$)"
-    # (?:^|\s+) — consume preceding whitespace, or anchor to string start
-    # group(1) captures the matched command key
-    return re.compile(rf"(?:^|\s+)({alts})\b{lookahead}", re.IGNORECASE)
+    strict_alts = "|".join(
+        re.escape(k) for k in sorted(_STRICT_COMMANDS, key=len, reverse=True)
+    )
+    lookahead = rf"(?=\s+(?:{all_alts})\b|(?-i:\s+[A-Z])|$)"
+    return re.compile(rf"(?:^|\s+)({strict_alts})\b{lookahead}", re.IGNORECASE)
 
 
-_SUBST_RE: re.Pattern[str] = _build_subst_re()
+_LOOSE_RE: re.Pattern[str] = _make_loose_re()
+_STRICT_RE: re.Pattern[str] = _make_strict_re()
 
 
 def _apply_punctuation(text: str) -> str:
     """Replace spoken punctuation commands with their symbol equivalents.
 
-    Substitution is word-boundary aware:
-    ``"My period is late"`` → ``"My period is late"`` (unchanged)
-    ``"Hello world period new line This is a test"``
-        → ``"Hello world.\\nThis is a test"``
+    Two-pass strategy:
+
+    1. **Loose pass** — replace ``new line``, ``comma``, ``open quote``, etc.
+       anywhere they appear as whole words (they are never ordinary nouns).
+    2. **Strict pass** — replace ``period`` only when it sits at a phrase
+       boundary, preventing ``"My period is late"`` → ``"My . is late"``.
+
+    Post-processing removes stray whitespace artefacts:
+    - spaces after ``\\n`` (from inline newline injection)
+    - space between ``"`` (open-quote) and the first quoted word
 
     Args:
         text: Raw transcribed text.
@@ -77,7 +94,13 @@ def _apply_punctuation(text: str) -> str:
     def _repl(m: re.Match[str]) -> str:
         return _COMMAND_MAP[m.group(1).lower()]
 
-    return _SUBST_RE.sub(_repl, text)
+    result = _LOOSE_RE.sub(_repl, text)   # pass 1
+    result = _STRICT_RE.sub(_repl, result)  # pass 2
+
+    # Clean artefacts
+    result = re.sub(r"\n[ \t]+", "\n", result)      # space after \n
+    result = re.sub(r"\u201c\s+", "\u201c", result)  # space after open-quote
+    return result
 
 
 # ---------------------------------------------------------------------------

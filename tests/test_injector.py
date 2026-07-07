@@ -26,19 +26,21 @@ from assistant.utils.exceptions import InjectorError
         ("Hello world new paragraph", "Hello world\n\n"),
         ("Hello world open quote", "Hello world\u201c"),
         ("Hello world close quote", "Hello world\u201d"),
-        # Acceptance test: mixed commands before capitalized continuation
+        # Acceptance test: mixed commands before capitalised continuation
         (
             "Hello world period new line This is a test",
             "Hello world.\nThis is a test",
         ),
-        # Chain: command before another command
+        # "comma" mid-sentence (loose rule — always replace)
         ("Hello comma world period", "Hello, world."),
-        # Anti-example: command NOT at phrase boundary → unchanged
+        # Anti-example: "period" NOT at phrase boundary → unchanged
         ("My period is late", "My period is late"),
         # No commands → unchanged
         ("Nothing to replace here", "Nothing to replace here"),
         # Command at very start of string (edge case)
         ("period", "."),
+        # Quotes
+        ("open quote Hello close quote", "\u201cHello\u201d"),
     ],
 )
 def test_apply_punctuation(raw: str, expected: str) -> None:

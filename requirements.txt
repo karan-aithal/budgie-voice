@@ -9,18 +9,17 @@ PyAudio>=0.2.14          # fallback audio backend (Phase 2+)
 torch>=2.0.0
 torchaudio>=2.0.0
 # Silero VAD is loaded via torch.hub (no pip package required for Phase 1)
-# SpeechBrain added in Phase 3:
-#   speechbrain>=1.0.0
+speechbrain>=1.0.0       # Phase 3: ECAPA-TDNN speaker verification
 
 # ── Config & data ─────────────────────────────────────────────────────────────
 numpy>=1.26.0
 pyyaml>=6.0
 
-# ── Hotkey / tray / GUI (Phase 4) ─────────────────────────────────────────────
-# pynput>=1.7.6
-# PyQt6>=6.6.0
-# qasync>=0.27.0
-# pyqtgraph>=0.13.3
+# ── Hotkey / tray / GUI ───────────────────────────────────────────────────────
+# pynput>=1.7.6           # Phase 4
+PyQt6>=6.6.0             # Phase 3: enrollment wizard GUI
+# qasync>=0.27.0          # Phase 4
+pyqtgraph>=0.13.3        # Phase 3: waveform preview
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest>=8.0.0

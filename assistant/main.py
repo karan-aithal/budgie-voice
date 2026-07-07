@@ -1,14 +1,16 @@
-"""Voice Assistant — Phase 2 entry point.
+"""Voice Assistant — Phase 3 entry point.
 
-Pipeline (Phase 2):
+Pipeline (Phase 3):
 
     Microphone → AudioCapture → asyncio.Queue
                                       │
                                  SileroVAD.stream()
                                       │  (speech segments)
+                                 SpeakerVerifier.verify()  ← Phase 3
+                                      │  (is_me=False → skip)
                                  WhisperRecognizer.transcribe()
                                       │
-                              XdotoolInjector.inject()  ← Phase 2
+                              XdotoolInjector.inject()
                                       │
                                   stdout  [HH:MM:SS] [conf=0.87] Hello world
 
@@ -30,6 +32,7 @@ from assistant.audio.vad import SileroVAD
 from assistant.config.settings import Settings, load_settings
 from assistant.injector.xdotool import XdotoolInjector
 from assistant.speech.recognizer import WhisperRecognizer
+from assistant.speaker.verifier import SpeakerVerifier
 from assistant.utils.exceptions import InjectorError
 from assistant.utils.logging_setup import setup_logging
 
@@ -47,8 +50,9 @@ async def _run_pipeline(
     recognizer: WhisperRecognizer,
     settings: Settings,
     injector: XdotoolInjector | None = None,
+    verifier: SpeakerVerifier | None = None,
 ) -> None:
-    """Drive the VAD → STT → inject/stdout loop.
+    """Drive the VAD → speaker verify → STT → inject/stdout loop.
 
     Args:
         audio_queue: Queue populated by :class:`AudioCapture`.
@@ -56,11 +60,22 @@ async def _run_pipeline(
         recognizer: Loaded :class:`WhisperRecognizer` instance.
         settings: Full application settings (threshold, etc.).
         injector: Optional :class:`XdotoolInjector`; ``None`` on non-Linux.
+        verifier: Optional :class:`SpeakerVerifier`; skips verification when
+            ``None`` or when voiceprint is absent (disabled mode).
     """
     loop = asyncio.get_running_loop()
     threshold = settings.stt.confidence_threshold
 
     async for segment in vad.stream(audio_queue):
+        # Speaker verification — fast, but still run in executor for safety
+        if verifier is not None and settings.speaker.enabled:
+            is_me, score = await loop.run_in_executor(
+                None, verifier.verify, segment
+            )
+            if not is_me:
+                logger.debug("Speaker rejected (score=%.3f) — skipping", score)
+                continue
+
         # Transcription is CPU-intensive — run in thread pool to avoid
         # blocking the event loop and starving the audio queue.
         result = await loop.run_in_executor(None, recognizer.transcribe, segment)
@@ -114,7 +129,7 @@ async def main_async() -> None:
         backup_count=settings.logging.backup_count,
     )
 
-    logger.info("Voice Assistant Phase 2 — starting")
+    logger.info("Voice Assistant Phase 3 — starting")
 
     audio_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
 
@@ -144,6 +159,14 @@ async def main_async() -> None:
     logger.info("Loading Whisper '%s' model …", settings.stt.model)
     await loop.run_in_executor(None, recognizer.load)
 
+    verifier = SpeakerVerifier(
+        voiceprint_path=settings.speaker.voiceprint_path,
+        threshold=settings.speaker.threshold,
+    )
+    if settings.speaker.enabled:
+        logger.info("Loading speaker verifier …")
+        await loop.run_in_executor(None, verifier.load)
+
     await capture.start()
 
     injector: XdotoolInjector | None = XdotoolInjector(
@@ -152,7 +175,7 @@ async def main_async() -> None:
     )
 
     pipeline_task = asyncio.create_task(
-        _run_pipeline(audio_queue, vad, recognizer, settings, injector),
+        _run_pipeline(audio_queue, vad, recognizer, settings, injector, verifier),
         name="pipeline",
     )
 

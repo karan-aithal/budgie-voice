@@ -24,6 +24,9 @@ pip install \
     "pyyaml>=6.0" \
     "torch>=2.0.0" \
     "torchaudio>=2.0.0" \
+    "speechbrain>=1.0.0" \
+    "PyQt6>=6.6.0" \
+    "pyqtgraph>=0.13.3" \
     "pytest>=8.0.0" \
     "pytest-asyncio>=0.23.0"
 
