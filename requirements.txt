@@ -1,26 +1,29 @@
 # ── Core STT ──────────────────────────────────────────────────────────────────
-faster-whisper>=1.0.0
+# Pin with: pip freeze | grep faster-whisper
+faster-whisper==1.1.1
 
 # ── Audio capture ─────────────────────────────────────────────────────────────
-sounddevice>=0.4.6
-PyAudio>=0.2.14          # fallback audio backend (Phase 2+)
+sounddevice==0.5.1
+PyAudio==0.2.14
 
-# ── Deep learning (VAD + speaker verification) ────────────────────────────────
-torch>=2.0.0
-torchaudio>=2.0.0
-# Silero VAD is loaded via torch.hub (no pip package required for Phase 1)
-speechbrain>=1.0.0       # Phase 3: ECAPA-TDNN speaker verification
+# ── Deep learning ─────────────────────────────────────────────────────────────
+# CPU install (no CUDA): pip install torch torchaudio --index-url https://download.pytorch.org/whl/cpu
+# GPU install (CUDA 12): pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+torch==2.4.0
+torchaudio==2.4.0
+# Silero VAD loaded via torch.hub — no pip package needed
+speechbrain==1.0.2
 
 # ── Config & data ─────────────────────────────────────────────────────────────
-numpy>=1.26.0
-pyyaml>=6.0
+numpy==2.0.1
+pyyaml==6.0.2
 
 # ── Hotkey / tray / GUI ───────────────────────────────────────────────────────
-pynput>=1.7.6            # Phase 4: global hotkey listener
-PyQt6>=6.6.0             # Phase 3: enrollment wizard GUI
-qasync>=0.27.0           # Phase 4: Qt + asyncio event loop fusion
-pyqtgraph>=0.13.3        # Phase 3: waveform preview
+pynput==1.7.7
+PyQt6==6.7.1
+qasync==0.27.1
+pyqtgraph==0.13.7
 
 # ── Testing ───────────────────────────────────────────────────────────────────
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
+pytest==8.3.2
+pytest-asyncio==0.23.8
