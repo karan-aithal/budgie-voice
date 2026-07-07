@@ -165,6 +165,7 @@ class RealtimeSpeechRecognizer:
                 # Models
                 model=stt.model,
                 language=stt.language,
+                compute_type=stt.compute_type,
                 realtime_model_type=realtime_model,
                 beam_size=getattr(stt, "beam_size", 1),
 
@@ -174,7 +175,10 @@ class RealtimeSpeechRecognizer:
                 on_realtime_transcription_stabilized=self._on_stable,
 
                 # VAD (dual Silero + WebRTC for low-latency detection)
-                silero_sensitivity=0.4,
+                # Higher silero_sensitivity → only confident speech triggers
+                # transcription, reducing false positives that faster_whisper
+                # would then filter out as silence.
+                silero_sensitivity=0.6,
                 webrtc_sensitivity=2,
                 post_speech_silence_duration=vad.speech_pad_ms / 1000.0,
 
