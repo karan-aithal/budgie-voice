@@ -1,0 +1,46 @@
+# Voice Assistant — example configuration
+# Copy to: ~/.config/voice-assistant/config.yaml
+# (Done automatically on first run if the file is absent.)
+
+hotkey:
+  toggle_listen: "ctrl+space"   # Any combo parseable by pynput
+
+audio:
+  device: null            # null = system default; or device name/index
+  sample_rate: 16000
+  chunk_duration_ms: 30
+
+vad:
+  enabled: true
+  aggressiveness: 2       # Silero sensitivity 0–3 (higher = more speech detected)
+  speech_pad_ms: 300      # Pad silence before/after speech segment
+
+stt:
+  model: "small"          # "tiny" | "small" | "medium" | "large-v3"
+  device: "auto"          # "auto" | "cpu" | "cuda"
+  compute_type: "int8"
+  language: "en"
+  confidence_threshold: 0.55   # Segments below this trigger low-confidence warning
+  beam_size: 5
+
+speaker:
+  enabled: true
+  voiceprint_path: "~/.config/voice-assistant/voiceprint.pt"
+  threshold: 0.75         # Cosine similarity threshold 0–1
+  min_samples: 5          # Minimum enrollment recordings required
+
+injection:
+  delay_ms: 12            # xdotool keystroke delay
+  clear_modifiers: true
+
+tray:
+  enabled: true
+
+logging:
+  level: "INFO"           # DEBUG | INFO | WARNING | ERROR
+  max_bytes: 5242880      # 5 MB per log file
+  backup_count: 3
+
+notifications:
+  low_confidence_message: "⚠️ I couldn't hear you clearly — could you repeat that?"
+  tool: "notify-send"     # "notify-send" or "libnotify"

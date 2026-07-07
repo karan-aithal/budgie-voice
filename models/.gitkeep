@@ -1,0 +1,5 @@
+# models/ — downloaded model files (not committed to git)
+# Whisper models: downloaded automatically to ~/.cache/huggingface/
+# Silero VAD:     cached in ~/.cache/torch/hub/
+*
+!.gitkeep

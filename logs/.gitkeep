@@ -1,0 +1,4 @@
+# logs/ — project-root reference only
+# Actual logs → ~/.local/share/voice-assistant/logs/app.log
+*
+!.gitkeep

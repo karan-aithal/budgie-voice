@@ -1,11 +1,130 @@
-# Master Build Prompt — Linux Voice Typing Assistant
-> Paste this prompt in full into a new Claude conversation to build the project phase by phase.
+# myna-voice — Linux Desktop Voice Typing Assistant
+
+100% offline voice-to-text that types into any focused window.
+Python 3.12 · Ubuntu 22.04 LTS (X11) · cross-platform Phase 1.
+
+---
+
+## Phase 1 — Mic Capture + VAD + Whisper STT (current)
+
+Pipeline: `microphone → Silero VAD → Faster-Whisper → stdout`
+
+### Quick start
+
+```bash
+# 1. Clone + enter project
+git clone <repo> myna-voice && cd myna-voice
+
+# 2. Create venv (recommended)
+python3.12 -m venv .venv && source .venv/bin/activate
+
+# 3. Install deps (Ubuntu)
+bash scripts/install_deps.sh
+
+# 4. Run
+python assistant/main.py
+# or: python -m assistant.main
+```
+
+### Expected output
+
+```
+2026-07-07 14:32:01 [INFO    ] assistant.main: Voice Assistant Phase 1 — starting
+2026-07-07 14:32:08 [INFO    ] assistant.speech.recognizer: Whisper model ready
+2026-07-07 14:32:08 [INFO    ] assistant.main: Listening — speak into the microphone.  Ctrl+C to quit.
+[14:32:12] [conf=0.84] Hello world, this is a test.
+[14:32:16] [conf=0.79] The quick brown fox jumps over the lazy dog.
+```
+
+Ctrl+C exits cleanly.
+
+---
+
+## Configuration
+
+Default path: `~/.config/voice-assistant/config.yaml`
+Auto-copied from `config.yaml.example` on first run.
+
+| Key | Default | Notes |
+|---|---|---|
+| `stt.model` | `small` | `tiny` \| `small` \| `medium` \| `large-v3` |
+| `stt.device` | `auto` | Auto-selects CUDA if available |
+| `stt.confidence_threshold` | `0.55` | Below this → segment discarded |
+| `vad.aggressiveness` | `2` | 0 (least) – 3 (most) |
+| `audio.device` | `null` | `null` = OS default mic |
+
+---
+
+## Model locations (auto-downloaded)
+
+| Model | Path |
+|---|---|
+| Whisper | `~/.cache/huggingface/hub/` |
+| Silero VAD | `~/.cache/torch/hub/snakers4_silero-vad_master/` |
+
+~250 MB for `small`. 100% offline after first run.
+
+---
+
+## Logs
+
+`~/.local/share/voice-assistant/logs/app.log` — rotates at 5 MB, 3 backups.
+
+```bash
+tail -f ~/.local/share/voice-assistant/logs/app.log
+```
+
+---
+
+## Tests
+
+```bash
+pytest
+```
+
+---
+
+## Project structure
+
+```
+assistant/
+├── main.py                  # Entry point
+├── audio/
+│   ├── capture.py           # sounddevice → asyncio.Queue
+│   └── vad.py               # Silero VAD streaming
+├── speech/
+│   └── recognizer.py        # Faster-Whisper → TranscriptResult
+├── config/
+│   └── settings.py          # YAML → Settings dataclass
+├── utils/
+│   ├── exceptions.py        # Custom exception hierarchy
+│   └── logging_setup.py     # Rotating file + stderr
+├── speaker/                 # Phase 3 — ECAPA-TDNN
+├── injector/                # Phase 2 — xdotool
+└── tray/                    # Phase 4 — QSystemTrayIcon
+tests/
+scripts/
+config.yaml.example
+requirements.txt
+```
+
+---
+
+## Roadmap
+
+| Phase | Feature |
+|---|---|
+| 1 ✓ | Mic + VAD + Whisper + console output |
+| 2 | xdotool text injection |
+| 3 | Speaker verification (ECAPA-TDNN) |
+| 4 | Hotkey toggle + system tray + notifications |
+| 5 | Systemd user service + packaging |
 
 ---
 
 ## Context & Goal
 
-You are helping me build a **Linux desktop voice typing assistant** for Ubuntu 24.04 LTS (X11) using Python 3.12. The application continuously listens to my microphone, recognises only **my voice**, and automatically types the transcribed text wherever my keyboard cursor is currently focused — browser, VS Code, terminal, LibreOffice, etc.
+You are helping me build a **Linux desktop voice typing assistant** for Ubuntu 22.04 LTS (X11) using Python 3.12. The application continuously listens to my microphone, recognises only **my voice**, and automatically types the transcribed text wherever my keyboard cursor is currently focused — browser, VS Code, terminal, LibreOffice, etc.
 
 This is **Phase 1 of a larger personal AI assistant**. Keep the architecture open to future extension (adding LLM reasoning, tool use, etc.).
 
@@ -15,7 +134,7 @@ This is **Phase 1 of a larger personal AI assistant**. Keep the architecture ope
 
 | Concern | Decision |
 |---|---|
-| OS / Display | Ubuntu 24.04 LTS, X11 (Wayland later) |
+| OS / Display | Ubuntu 22.04 LTS, X11 (Wayland later) | Also cross-platform Windows
 | Language | Python 3.12 |
 | STT Engine | Faster-Whisper (`small` or `medium` model, auto-select GPU if available, fall back to CPU) |
 | Spoken language | English only (`language="en"`) |
