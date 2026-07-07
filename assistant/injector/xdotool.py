@@ -159,22 +159,55 @@ class XdotoolInjector:
             stderr = exc.stderr.decode(errors="replace").strip()
             raise InjectorError(f"xdotool failed (exit {exc.returncode}): {stderr}") from exc
 
-    def _type_segment(self, text: str) -> None:
+    def get_focused_window(self) -> str | None:
+        """Return the active X11 window ID string, or ``None`` on failure.
+
+        Call this *before* any blocking operation (e.g. Whisper transcription)
+        to capture which window the user was typing into.  Pass the result to
+        :meth:`inject` so text always lands in the correct window even if
+        focus shifts during transcription.
+
+        Returns:
+            Decimal window-ID string from ``xdotool getactivewindow``,
+            or ``None`` if xdotool is unavailable or returns an error.
+        """
+        try:
+            result = subprocess.run(
+                ["xdotool", "getactivewindow"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            return result.stdout.strip() or None
+        except (FileNotFoundError, subprocess.CalledProcessError):
+            return None
+
+    def _type_segment(self, text: str, window_id: str | None = None) -> None:
         """Type a single line segment (no newlines) via xdotool.
 
         Args:
             text: Plain text with no newline characters.
+            window_id: X11 window ID from :meth:`get_focused_window`.
+                ``None`` → type into currently focused window.
         """
         cmd: list[str] = ["xdotool", "type"]
+        if window_id:
+            cmd.extend(["--window", window_id])
         if self._clear_modifiers:
             cmd.append("--clearmodifiers")
         cmd.extend(["--delay", str(self._delay_ms)])
         cmd.extend(["--", text])
         self._run(cmd)
 
-    def _press_return(self) -> None:
-        """Send a Return key press via xdotool key."""
+    def _press_return(self, window_id: str | None = None) -> None:
+        """Send a Return key press via xdotool key.
+
+        Args:
+            window_id: X11 window ID.  ``None`` → currently focused window.
+        """
         cmd: list[str] = ["xdotool", "key"]
+        if window_id:
+            cmd.extend(["--window", window_id])
         if self._clear_modifiers:
             cmd.append("--clearmodifiers")
         cmd.append("Return")
@@ -184,30 +217,33 @@ class XdotoolInjector:
     # Public
     # ------------------------------------------------------------------
 
-    def inject(self, text: str) -> None:
-        """Substitute punctuation commands and type text into the active window.
+    def inject(self, text: str, window_id: str | None = None) -> None:
+        """Substitute punctuation commands and type text into *window_id*.
 
-        Newlines (``\\n``) are injected as xdotool ``key Return`` so they work
-        in terminals, browsers, and GUI editors alike.
+        Capture ``window_id`` with :meth:`get_focused_window` *before*
+        calling Whisper so that text always lands in the window the user was
+        typing into, even if focus shifts during the 1-3 s of transcription.
+
+        Newlines (``\\n``) are injected as xdotool ``key Return``.
 
         Args:
             text: Raw transcribed text, possibly containing dictation commands.
+            window_id: X11 window ID from :meth:`get_focused_window`.
+                ``None`` → type into currently focused window.
 
         Raises:
             InjectorError: If xdotool is unavailable or a sub-command fails.
         """
         substituted = _apply_punctuation(text)
         logger.debug("inject pre:  %r", text)
-        logger.debug("inject post: %r", substituted)
+        logger.debug("inject post: %r  window=%s", substituted, window_id)
 
         if not substituted:
             return
 
-        # Split on newlines; type each segment, pressing Return between them.
-        # "a\n\nb" → ["a", "", "b"] → type "a", Return, Return, type "b"
         lines = substituted.split("\n")
         for idx, segment in enumerate(lines):
             if segment:
-                self._type_segment(segment)
+                self._type_segment(segment, window_id)
             if idx < len(lines) - 1:
-                self._press_return()
+                self._press_return(window_id)

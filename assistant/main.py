@@ -1,26 +1,24 @@
-"""Voice Assistant — Phase 4 entry point.
+"""Voice Assistant — entry point.
 
-Pipeline (Phase 4):
+Two pipeline modes (set via ``stt.mode`` in config):
 
-    Microphone → AudioCapture → asyncio.Queue
-                                      │
-                                 SileroVAD.stream()
-                                      │  (only when is_listening is set)
-                                 SpeakerVerifier.verify()
-                                      │  (is_me=False → skip)
-                                 WhisperRecognizer.transcribe()
-                                      │
-                              ┌── confidence < threshold ──▶ 🟠 tray + notify-send
-                              └── confidence OK ──────────▶ XdotoolInjector + stdout
+  realtime  — RealtimeSTT drives mic capture + VAD + dual-model STT.
+              Confirmed words are injected live as you speak (word by word).
+              Fastest UX; speaker verification bypassed.
 
-Hotkey toggles is_listening asyncio.Event (pynput in background thread).
-Qt event loop + asyncio fused via qasync.
+  batch     — Original pipeline: sounddevice → Silero VAD → faster-whisper.
+              Full speaker verification and confidence checks available.
+              Rolling 2-second chunks give a live feel; final flush on silence.
+
+In both modes:
+  • Hotkey toggles is_listening (pynput, background thread)
+  • System tray shows state (qasync fuses Qt + asyncio)
+  • xdotool window ID captured BEFORE transcription to fix focus-shift bug
+  • Ctrl+C / SIGTERM / tray Quit exits cleanly
 
 Run:
     python assistant/main.py
     python -m assistant.main
-
-Exit cleanly with Ctrl+C, SIGTERM, or tray "Quit".
 """
 
 import asyncio
@@ -35,10 +33,11 @@ from assistant.audio.capture import AudioCapture
 from assistant.audio.vad import SileroVAD
 from assistant.config.settings import Settings, load_settings
 from assistant.injector.xdotool import XdotoolInjector
+from assistant.speech.realtime import RealtimeSpeechRecognizer
 from assistant.speech.recognizer import WhisperRecognizer
 from assistant.speaker.verifier import SpeakerVerifier
 from assistant.tray.icon import TrayIcon, TrayState
-from assistant.utils.exceptions import InjectorError
+from assistant.utils.exceptions import InjectorError, RecognizerError
 from assistant.utils.logging_setup import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -169,41 +168,88 @@ def _launch_enroller(settings: Settings) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Inner pipeline
+# ── REALTIME pipeline (RealtimeSTT — live word-by-word injection) ───────────
 # ---------------------------------------------------------------------------
 
 
-async def _run_pipeline(
+async def _run_realtime_pipeline(
+    recognizer: RealtimeSpeechRecognizer,
+    settings: Settings,
+    is_listening: asyncio.Event,
+    injector: Optional[XdotoolInjector],
+    tray: Optional[TrayIcon],
+) -> None:
+    """Inject words live as RealtimeSTT confirms them.
+
+    Synchronises ``is_listening`` with the recogniser every 50 ms so the
+    hotkey toggle propagates quickly without blocking the event loop.
+    """
+    loop = asyncio.get_running_loop()
+    _last_listening = False
+
+    async def _sync() -> None:
+        nonlocal _last_listening
+        while True:
+            now = is_listening.is_set()
+            if now != _last_listening:
+                recognizer.set_listening(now)
+                _last_listening = now
+            await asyncio.sleep(0.05)
+
+    sync_task = asyncio.create_task(_sync(), name="listening-sync")
+
+    try:
+        async for text in recognizer.stream():
+            if not is_listening.is_set():
+                continue
+
+            ts = datetime.now().strftime("%H:%M:%S")
+            sys.stdout.write(f"[{ts}] {text}\n")
+            sys.stdout.flush()
+            logger.info("[%s] %s", ts, text)
+
+            if injector is not None:
+                # Capture window NOW — we're about to inject immediately
+                window_id = injector.get_focused_window()
+                try:
+                    await loop.run_in_executor(
+                        None, injector.inject, text, window_id
+                    )
+                except InjectorError as exc:
+                    logger.error("Injection failed: %s", exc)
+    finally:
+        sync_task.cancel()
+
+
+# ---------------------------------------------------------------------------
+# ── BATCH pipeline (Silero VAD + faster-whisper rolling chunks) ─────────────
+# ---------------------------------------------------------------------------
+
+
+async def _run_batch_pipeline(
     audio_queue: asyncio.Queue,
     vad: SileroVAD,
     recognizer: WhisperRecognizer,
     settings: Settings,
     is_listening: asyncio.Event,
-    injector: Optional[XdotoolInjector] = None,
-    verifier: Optional[SpeakerVerifier] = None,
-    tray: Optional[TrayIcon] = None,
+    injector: Optional[XdotoolInjector],
+    verifier: Optional[SpeakerVerifier],
+    tray: Optional[TrayIcon],
 ) -> None:
-    """Drive the VAD → verify → STT → inject / stdout loop.
+    """VAD → speaker verify → Whisper → inject.
 
-    Args:
-        audio_queue: Queue populated by :class:`AudioCapture`.
-        vad: Configured :class:`SileroVAD` instance.
-        recognizer: Loaded :class:`WhisperRecognizer` instance.
-        settings: Full application settings.
-        is_listening: Set = actively transcribing; clear = idle.
-        injector: Optional xdotool injector (Linux only).
-        verifier: Optional ECAPA-TDNN speaker verifier.
-        tray: Optional system tray icon for state updates.
+    Key fix: ``window_id`` is captured from xdotool *before* the Whisper
+    call (which blocks for 0.2-2 s) so text always lands in the window the
+    user was typing into, even if focus moves during transcription.
     """
     loop = asyncio.get_running_loop()
     threshold = settings.stt.confidence_threshold
 
     async for segment in vad.stream(audio_queue):
-        # Respect hotkey toggle — discard segment if not listening
         if not is_listening.is_set():
             continue
 
-        # Speaker verification
+        # ── Speaker verification ───────────────────────────────────────────
         if verifier is not None and settings.speaker.enabled:
             is_me, score = await loop.run_in_executor(
                 None, verifier.verify, segment
@@ -212,7 +258,14 @@ async def _run_pipeline(
                 logger.debug("Speaker rejected (score=%.3f)", score)
                 continue
 
-        # Transcription
+        # ── Capture window BEFORE Whisper blocks (key fix) ─────────────────
+        window_id: str | None = None
+        if injector is not None:
+            window_id = await loop.run_in_executor(
+                None, injector.get_focused_window
+            )
+
+        # ── Transcription ──────────────────────────────────────────────────
         result = await loop.run_in_executor(None, recognizer.transcribe, segment)
         if result is None:
             continue
@@ -241,7 +294,9 @@ async def _run_pipeline(
             logger.info(line)
             if injector is not None:
                 try:
-                    await loop.run_in_executor(None, injector.inject, result.text)
+                    await loop.run_in_executor(
+                        None, injector.inject, result.text, window_id
+                    )
                 except InjectorError as exc:
                     logger.error("Injection failed: %s", exc)
 
@@ -252,58 +307,18 @@ async def _run_pipeline(
 
 
 async def main_async() -> None:
-    """Initialise all components and run the pipeline until cancelled.
-
-    Sequence:
-    1. Load config → logging setup.
-    2. Build AudioCapture, SileroVAD, WhisperRecognizer, SpeakerVerifier.
-    3. Load models in thread pool.
-    4. Create ``is_listening`` asyncio.Event (initially not set → IDLE).
-    5. Create TrayIcon (if enabled); connect toggle / enroll / quit callbacks.
-    6. Register hotkey via pynput (if pynput installed).
-    7. Start audio capture; launch pipeline task.
-    8. Install SIGINT / SIGTERM handlers.
-    9. On exit: stop capture, stop hotkey listener, log shutdown.
-    """
+    """Initialise all components and run the correct pipeline until cancelled."""
     settings = load_settings()
     setup_logging(
         level=settings.logging.level,
         max_bytes=settings.logging.max_bytes,
         backup_count=settings.logging.backup_count,
     )
-    logger.info("Voice Assistant Phase 4 — starting")
+
+    mode = getattr(settings.stt, "mode", "realtime")
+    logger.info("Voice Assistant starting — mode=%s", mode)
 
     loop = asyncio.get_running_loop()
-    audio_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
-
-    capture = AudioCapture(
-        queue=audio_queue,
-        sample_rate=settings.audio.sample_rate,
-        chunk_duration_ms=settings.audio.chunk_duration_ms,
-        device=settings.audio.device,
-    )
-    vad = SileroVAD(
-        aggressiveness=settings.vad.aggressiveness,
-        speech_pad_ms=settings.vad.speech_pad_ms,
-        sample_rate=settings.audio.sample_rate,
-    )
-    recognizer = WhisperRecognizer(
-        model_size=settings.stt.model,
-        device=settings.stt.device,
-        compute_type=settings.stt.compute_type,
-        language=settings.stt.language,
-        beam_size=settings.stt.beam_size,
-    )
-    verifier = SpeakerVerifier(
-        voiceprint_path=settings.speaker.voiceprint_path,
-        threshold=settings.speaker.threshold,
-    )
-
-    # Load models (blocking — may download on first run)
-    logger.info("Loading Whisper '%s' model …", settings.stt.model)
-    await loop.run_in_executor(None, recognizer.load)
-    if settings.speaker.enabled:
-        await loop.run_in_executor(None, verifier.load)
 
     injector: XdotoolInjector | None = XdotoolInjector(
         delay_ms=settings.injection.delay_ms,
@@ -311,24 +326,23 @@ async def main_async() -> None:
     )
 
     # ------------------------------------------------------------------
-    # Shared state — defined before closures that capture them
+    # Shared state (defined before closures that capture them)
     # ------------------------------------------------------------------
     is_listening: asyncio.Event = asyncio.Event()
     tray: TrayIcon | None = None
-    pipeline_task: asyncio.Task | None = None  # assigned below; closures read it
+    pipeline_task: asyncio.Task | None = None
 
     def _toggle() -> None:
-        """Toggle listening state (runs in Qt / asyncio thread)."""
         if is_listening.is_set():
             is_listening.clear()
             if tray:
                 tray.set_state(TrayState.IDLE)
-            logger.info("Listening stopped via toggle")
+            logger.info("Listening stopped")
         else:
             is_listening.set()
             if tray:
                 tray.set_state(TrayState.LISTENING)
-            logger.info("Listening started via toggle")
+            logger.info("Listening started")
 
     def _quit() -> None:
         if pipeline_task is not None:
@@ -348,21 +362,73 @@ async def main_async() -> None:
             logger.warning("Tray icon unavailable: %s", exc)
 
     # ------------------------------------------------------------------
-    # Hotkey listener (pynput, background thread)
+    # Hotkey
     # ------------------------------------------------------------------
-    hotkey_listener = _start_hotkey(
-        settings.hotkey.toggle_listen, _toggle, loop
-    )
+    hotkey_listener = _start_hotkey(settings.hotkey.toggle_listen, _toggle, loop)
 
-    await capture.start()
+    # ------------------------------------------------------------------
+    # Mode-specific setup and pipeline task
+    # ------------------------------------------------------------------
+    capture: Optional[AudioCapture] = None
+    rt_recognizer: Optional[RealtimeSpeechRecognizer] = None
 
-    pipeline_task = asyncio.create_task(
-        _run_pipeline(
-            audio_queue, vad, recognizer, settings,
-            is_listening, injector, verifier, tray,
-        ),
-        name="pipeline",
-    )
+    if mode == "realtime":
+        logger.info("Loading RealtimeSTT — model=%s  realtime=%s",
+                    settings.stt.model, getattr(settings.stt, "realtime_model", "tiny"))
+        rt_recognizer = RealtimeSpeechRecognizer(settings, loop, inject_on_stable=True)
+        try:
+            await loop.run_in_executor(None, rt_recognizer.load)
+        except RecognizerError as exc:
+            logger.error("%s — falling back to batch mode", exc)
+            mode = "batch"
+
+    if mode == "batch":
+        vad = SileroVAD(
+            aggressiveness=settings.vad.aggressiveness,
+            speech_pad_ms=settings.vad.speech_pad_ms,
+            min_speech_ms=getattr(settings.vad, "min_speech_ms", 400),
+            live_chunk_ms=getattr(settings.vad, "live_chunk_ms", 2000),
+            sample_rate=settings.audio.sample_rate,
+        )
+        recognizer = WhisperRecognizer(
+            model_size=settings.stt.model,
+            device=settings.stt.device,
+            compute_type=settings.stt.compute_type,
+            language=settings.stt.language,
+            beam_size=settings.stt.beam_size,
+        )
+        verifier = SpeakerVerifier(
+            voiceprint_path=settings.speaker.voiceprint_path,
+            threshold=settings.speaker.threshold,
+        )
+        audio_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
+        capture = AudioCapture(
+            queue=audio_queue,
+            sample_rate=settings.audio.sample_rate,
+            chunk_duration_ms=settings.audio.chunk_duration_ms,
+            device=settings.audio.device,
+        )
+
+        logger.info("Loading Whisper '%s' …", settings.stt.model)
+        await loop.run_in_executor(None, recognizer.load)
+        if settings.speaker.enabled:
+            await loop.run_in_executor(None, verifier.load)
+        await capture.start()
+
+        pipeline_task = asyncio.create_task(
+            _run_batch_pipeline(
+                audio_queue, vad, recognizer, settings,
+                is_listening, injector, verifier, tray,
+            ),
+            name="pipeline",
+        )
+    else:
+        # realtime mode
+        rt_recognizer.start_thread()
+        pipeline_task = asyncio.create_task(
+            _run_realtime_pipeline(rt_recognizer, settings, is_listening, injector, tray),
+            name="pipeline",
+        )
 
     # ------------------------------------------------------------------
     # OS signal handlers
@@ -375,10 +441,7 @@ async def main_async() -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
             loop.add_signal_handler(sig, _handle_signal, sig)
     except (NotImplementedError, ValueError):
-        signal.signal(
-            signal.SIGINT,
-            lambda _s, _f: loop.call_soon_threadsafe(_quit),
-        )
+        signal.signal(signal.SIGINT, lambda _s, _f: loop.call_soon_threadsafe(_quit))
 
     logger.info(
         "Ready — press %s to start listening.  Ctrl+C or tray Quit to exit.",
@@ -390,7 +453,10 @@ async def main_async() -> None:
     except asyncio.CancelledError:
         pass
     finally:
-        await capture.stop()
+        if capture is not None:
+            await capture.stop()
+        if rt_recognizer is not None:
+            rt_recognizer.stop()
         if hotkey_listener is not None:
             try:
                 hotkey_listener.stop()

@@ -45,23 +45,27 @@ class AudioSettings:
 
 @dataclass
 class VadSettings:
-    """Silero VAD configuration."""
+    """Silero VAD configuration (used in batch mode)."""
 
     enabled: bool = True
     aggressiveness: int = 2
-    speech_pad_ms: int = 300
+    speech_pad_ms: int = 200        # ms of silence before emitting segment
+    min_speech_ms: int = 400        # discard segments shorter than this
+    live_chunk_ms: int = 2000       # emit rolling chunk every N ms (0 = off)
 
 
 @dataclass
 class SttSettings:
-    """Faster-Whisper STT configuration."""
+    """Speech-to-text configuration."""
 
-    model: str = "small"
-    device: str = "auto"
+    mode: str = "realtime"          # "realtime" | "batch"
+    model: str = "small"            # tiny | small | medium | large-v3
+    realtime_model: str = "tiny"    # fast model for live word confirmation
+    device: str = "auto"            # auto | cpu | cuda
     compute_type: str = "int8"
     language: str = "en"
     confidence_threshold: float = 0.55
-    beam_size: int = 5
+    beam_size: int = 1              # 1 = greedy (fast); 5 = beam search
 
 
 @dataclass

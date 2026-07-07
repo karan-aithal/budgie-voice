@@ -19,6 +19,7 @@ echo "[2/3] Installing Python packages …"
 pip install --upgrade pip
 pip install \
     "faster-whisper>=1.0.0" \
+    "RealtimeSTT>=0.3.90" \
     "sounddevice>=0.4.6" \
     "numpy>=1.26.0" \
     "pyyaml>=6.0" \

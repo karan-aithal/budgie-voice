@@ -1,6 +1,6 @@
 # ── Core STT ──────────────────────────────────────────────────────────────────
-# Pin with: pip freeze | grep faster-whisper
 faster-whisper==1.1.1
+RealtimeSTT==0.3.104     # live streaming transcription (wraps faster-whisper)
 
 # ── Audio capture ─────────────────────────────────────────────────────────────
 sounddevice==0.5.1

@@ -5,6 +5,15 @@ speech segments (numpy arrays) via an async generator.
 
 Silero VAD requires 512-sample windows at 16 kHz (≈ 32 ms each).
 Incoming chunks are re-framed into 512-sample windows internally.
+
+Latency tuning knobs
+--------------------
+* ``speech_pad_ms`` — how long silence must last before a segment is emitted.
+  200 ms is a good balance; 300 ms feels sluggish.
+* ``min_speech_ms`` — discard segments shorter than this.  Prevents wasting
+  Whisper time on noise bursts or mic pops.
+* ``aggressiveness`` — Silero probability threshold (0 = gentlest, 3 = most
+  aggressive).  2 works well for typical mic conditions.
 """
 
 import asyncio
@@ -31,7 +40,10 @@ class SileroVAD:
         aggressiveness: Sensitivity 0–3 (higher → more speech detected,
             lower speech-probability threshold).
         speech_pad_ms: Milliseconds of trailing silence to include after
-            speech ends before emitting the segment.
+            speech ends before emitting the segment.  Lower = faster response,
+            but may cut off the end of utterances.  Default 200 ms.
+        min_speech_ms: Discard segments shorter than this (noise / mic pops).
+            Default 400 ms — shorter clips rarely transcribe usefully.
         sample_rate: Audio sample rate; must be 16 000 or 8 000.
     """
 
@@ -40,11 +52,15 @@ class SileroVAD:
     def __init__(
         self,
         aggressiveness: int = 2,
-        speech_pad_ms: int = 300,
+        speech_pad_ms: int = 200,
+        min_speech_ms: int = 400,
+        live_chunk_ms: int = 2000,
         sample_rate: int = 16_000,
     ) -> None:
         self._threshold: float = self._THRESHOLD_MAP.get(aggressiveness, 0.50)
         self._speech_pad_samples: int = int(sample_rate * speech_pad_ms / 1000)
+        self._min_speech_samples: int = int(sample_rate * min_speech_ms / 1000)
+        self._live_chunk_samples: int = int(sample_rate * live_chunk_ms / 1000)
         self._sample_rate = sample_rate
         self._model: Optional[object] = None  # torch.nn.Module, loaded lazily
 
@@ -70,9 +86,10 @@ class SileroVAD:
             model.eval()
             self._model = model
             logger.info(
-                "Silero VAD loaded — threshold=%.2f  pad=%d samples",
+                "Silero VAD loaded — threshold=%.2f  pad=%d ms  min_speech=%d ms",
                 self._threshold,
-                self._speech_pad_samples,
+                self._speech_pad_samples * 1000 // self._sample_rate,
+                self._min_speech_samples * 1000 // self._sample_rate,
             )
         except Exception as exc:
             raise VADError(f"Failed to load Silero VAD model: {exc}") from exc
@@ -93,6 +110,28 @@ class SileroVAD:
             prob: float = self._model(tensor, self._sample_rate).item()  # type: ignore[operator]
         return prob
 
+    def _try_emit(self, speech_buffer: list[np.ndarray]) -> np.ndarray | None:
+        """Concatenate *speech_buffer* and return it if long enough, else None.
+
+        Args:
+            speech_buffer: Accumulated speech windows.
+
+        Returns:
+            Concatenated segment numpy array, or ``None`` if below
+            ``min_speech_ms``.
+        """
+        segment = np.concatenate(speech_buffer)
+        duration_s = len(segment) / self._sample_rate
+        if len(segment) < self._min_speech_samples:
+            logger.debug(
+                "Segment too short (%.2f s < %.2f s) — discarded",
+                duration_s,
+                self._min_speech_samples / self._sample_rate,
+            )
+            return None
+        logger.debug("Speech segment ready — %.2f s", duration_s)
+        return segment
+
     # ------------------------------------------------------------------
     # Public
     # ------------------------------------------------------------------
@@ -100,21 +139,28 @@ class SileroVAD:
     async def stream(
         self, audio_queue: asyncio.Queue
     ) -> AsyncGenerator[np.ndarray, None]:
-        """Consume audio chunks and yield complete speech segments.
+        """Consume audio chunks and yield speech segments.
 
-        The generator runs until the caller's task is cancelled (``CancelledError``
-        propagates from ``await audio_queue.get()`` and stops the generator).
+        **Rolling-chunk mode** (``live_chunk_ms > 0``):
+        While speech is ongoing, emit a partial segment every
+        ``live_chunk_ms`` milliseconds so Whisper can transcribe and inject
+        progressively — text appears as you speak rather than waiting for
+        end-of-sentence.
+
+        **End-of-utterance flush**:
+        Remaining audio (from the last partial emit to end of silence) is
+        emitted as the final chunk of the utterance.
+
+        Segments shorter than ``min_speech_ms`` are silently discarded
+        (mic pops, background noise).
 
         State machine::
 
-            SILENCE → speech prob ≥ threshold → SPEECH (accumulate)
-            SPEECH  → silence_samples ≥ pad    → emit segment → SILENCE
-
-        Args:
-            audio_queue: Queue fed by :class:`~assistant.audio.capture.AudioCapture`.
+            SILENCE ──(speech detected)──► SPEECH (accumulate + rolling emit)
+            SPEECH  ──(silence ≥ pad)────► flush remainder → SILENCE
 
         Yields:
-            Float32 numpy array containing a single speech utterance.
+            Float32 numpy array of a speech chunk (≥ ``min_speech_ms``).
         """
         if self._model is None:
             loop = asyncio.get_running_loop()
@@ -124,6 +170,7 @@ class SileroVAD:
         speech_buffer: list[np.ndarray] = []
         in_speech = False
         silence_samples = 0
+        speech_since_emit = 0   # speech samples since last partial emit
 
         while True:
             chunk: np.ndarray = await audio_queue.get()
@@ -141,19 +188,33 @@ class SileroVAD:
                     if not in_speech:
                         in_speech = True
                         silence_samples = 0
+                        speech_since_emit = 0
                         logger.debug("Speech start (p=%.3f)", prob)
+
                     speech_buffer.append(window)
+                    speech_since_emit += _WINDOW
                     silence_samples = 0
 
-                    # Guard against runaway long segments
+                    # ── Rolling partial emit ──────────────────────────────
+                    if (
+                        self._live_chunk_samples > 0
+                        and speech_since_emit >= self._live_chunk_samples
+                    ):
+                        seg = self._try_emit(speech_buffer)
+                        speech_buffer = []
+                        speech_since_emit = 0
+                        if seg is not None:
+                            yield seg
+
+                    # ── Runaway guard (30 s cap) ──────────────────────────
                     total = sum(w.shape[0] for w in speech_buffer)
                     if total >= _MAX_SEGMENT_SAMPLES:
-                        logger.warning(
-                            "Segment exceeded 30 s — emitting early and resetting"
-                        )
-                        yield np.concatenate(speech_buffer)
+                        logger.warning("Segment >30 s — force-emitting")
+                        seg = self._try_emit(speech_buffer)
                         speech_buffer = []
-                        in_speech = False
+                        speech_since_emit = 0
+                        if seg is not None:
+                            yield seg
 
                 else:
                     if in_speech:
@@ -161,14 +222,13 @@ class SileroVAD:
                         silence_samples += _WINDOW
 
                         if silence_samples >= self._speech_pad_samples:
-                            segment = np.concatenate(speech_buffer)
-                            logger.debug(
-                                "Speech segment emitted — %.2f s",
-                                len(segment) / self._sample_rate,
-                            )
-                            yield segment
+                            # Flush final chunk of this utterance
+                            seg = self._try_emit(speech_buffer)
                             speech_buffer = []
+                            speech_since_emit = 0
                             in_speech = False
                             silence_samples = 0
+                            if seg is not None:
+                                yield seg
 
             remainder = combined[offset:]

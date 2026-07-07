@@ -13,15 +13,19 @@ audio:
 vad:
   enabled: true
   aggressiveness: 2       # Silero sensitivity 0–3 (higher = more speech detected)
-  speech_pad_ms: 300      # Pad silence before/after speech segment
+  speech_pad_ms: 200      # ms of trailing silence before emitting segment (lower = faster)
+  min_speech_ms: 400      # discard segments shorter than this (noise filter)
+  live_chunk_ms: 2000     # emit rolling partial chunk every N ms; 0 = wait for silence
 
 stt:
-  model: "small"          # "tiny" | "small" | "medium" | "large-v3"
+  mode: "realtime"        # "realtime" (live word-by-word) | "batch" (wait for silence)
+  model: "small"          # accuracy model: tiny | small | medium | large-v3
+  realtime_model: "tiny"  # fast model used for live word confirmation (realtime mode)
   device: "auto"          # "auto" | "cpu" | "cuda"
   compute_type: "int8"
   language: "en"
-  confidence_threshold: 0.55   # Segments below this trigger low-confidence warning
-  beam_size: 5
+  confidence_threshold: 0.55   # batch mode: segments below this trigger warning
+  beam_size: 1            # 1 = greedy (fast); 5 = beam search (accurate)
 
 speaker:
   enabled: true

@@ -59,7 +59,7 @@ class WhisperRecognizer:
         device: str = "auto",
         compute_type: str = "int8",
         language: str = "en",
-        beam_size: int = 5,
+        beam_size: int = 1,
     ) -> None:
         self._model_size = model_size
         self._device = self._resolve_device(device)
@@ -147,7 +147,9 @@ class WhisperRecognizer:
                 audio,
                 language=self._language,
                 beam_size=self._beam_size,
-                vad_filter=False,  # VAD handled by audio/vad.py
+                vad_filter=False,           # VAD handled by audio/vad.py
+                without_timestamps=True,    # skip timestamp generation (faster)
+                condition_on_previous_text=False,  # no context lookup (faster)
             )
             segments = list(segments_gen)  # consume generator
         except Exception as exc:
