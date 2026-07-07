@@ -6,22 +6,22 @@ hotkey:
   toggle_listen: "ctrl+space"   # Any combo parseable by pynput
 
 audio:
-  device: null            # null = system default; or device name/index
+  device: null
   sample_rate: 16000
-  chunk_duration_ms: 30
+  chunk_duration_ms: 20
 
 vad:
   enabled: true
   aggressiveness: 2       # Silero sensitivity 0–3 (higher = more speech detected)
-  speech_pad_ms: 200      # ms of trailing silence before emitting segment (lower = faster)
-  min_speech_ms: 400      # discard segments shorter than this (noise filter)
-  live_chunk_ms: 2000     # emit rolling partial chunk every N ms; 0 = wait for silence
+  speech_pad_ms: 150      # ms of trailing silence before emitting segment (lower = faster)
+  min_speech_ms: 300      # discard segments shorter than this (noise filter)
+  live_chunk_ms: 1000     # emit rolling partial chunk every N ms; 0 = wait for silence
 
 stt:
   mode: "realtime"        # "realtime" (live word-by-word) | "batch" (wait for silence)
-  model: "small"          # accuracy model: tiny | small | medium | large-v3
+  model: "medium"          # accuracy model: tiny | small | medium | large-v3
   realtime_model: "tiny"  # fast model used for live word confirmation (realtime mode)
-  device: "auto"          # "auto" | "cpu" | "cuda"
+  device: "cpu"          # "auto" | "cpu" | "cuda"
   compute_type: "int8"
   language: "en"
   confidence_threshold: 0.55   # batch mode: segments below this trigger warning
@@ -30,11 +30,11 @@ stt:
 speaker:
   enabled: true
   voiceprint_path: "~/.config/voice-assistant/voiceprint.pt"
-  threshold: 0.75         # Cosine similarity threshold 0–1
-  min_samples: 5          # Minimum enrollment recordings required
+  threshold: 0.72         # Cosine similarity threshold 0–1
+  min_samples: 10          # Minimum enrollment recordings required
 
 injection:
-  delay_ms: 12            # xdotool keystroke delay
+  delay_ms: 8            # xdotool keystroke delay
   clear_modifiers: true
 
 tray:

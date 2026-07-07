@@ -12,7 +12,12 @@ PyAudio==0.2.14
 torch==2.4.0
 torchaudio==2.4.0
 # Silero VAD loaded via torch.hub — no pip package needed
-speechbrain==1.0.2
+# Speaker verification (ECAPA-TDNN)
+speechbrain>=1.0.2
+huggingface-hub>=0.24.0,<1.0
+
+# Silero VAD loaded via torch.hub
+# No pip package required
 
 # ── Config & data ─────────────────────────────────────────────────────────────
 numpy==2.0.1
@@ -23,6 +28,9 @@ pynput==1.7.7
 PyQt6==6.7.1
 qasync==0.27.1
 pyqtgraph==0.13.7
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+typeguard>=4.0.0
 
 # ── Testing ───────────────────────────────────────────────────────────────────
 pytest==8.3.2

@@ -36,7 +36,7 @@ try:
 except ImportError:
     _HAS_PG = False
 
-_RECORD_SECS = 3.5
+_RECORD_SECS = 8.0
 _SAMPLE_RATE = 16_000
 
 # Wizard page IDs
@@ -88,7 +88,7 @@ class WelcomePage(QWizardPage):
         self.setTitle("Voice Enrollment Wizard")
         self.setSubTitle(
             f"Record {min_samples} short speech clips to create your voiceprint.\n"
-            "Each clip is ~3.5 seconds.  Speak naturally — read a few sentences "
+            f"Each clip is ~ {_RECORD_SECS} seconds.  Speak naturally — read a few sentences "
             "or count out loud."
         )
         body = QLabel(
@@ -293,7 +293,7 @@ class ConfirmationPage(QWizardPage):
         layout.addWidget(test_btn)
 
     def _run_test(self) -> None:
-        self._result_lbl.setText("Recording 3.5 s…")
+        self._result_lbl.setText("Recording 8.0 s…")
         self._test_thread = RecordThread(duration_s=_RECORD_SECS, sample_rate=_SAMPLE_RATE)
         self._test_thread.finished.connect(self._on_test_done)
         self._test_thread.error.connect(
@@ -335,7 +335,7 @@ class EnrollmentWizard(QWizard):
     def __init__(self, settings: Settings) -> None:
         super().__init__()
         self.setWindowTitle("Voice Enrollment Wizard")
-        self.setWizardStyle(QWizard.WizardStyle.Modern)
+        self.setWizardStyle(QWizard.WizardStyle.ModernStyle)
         self.setMinimumSize(520, 420)
 
         vp_path = Path(settings.speaker.voiceprint_path).expanduser()

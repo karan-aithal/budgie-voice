@@ -23,7 +23,7 @@ class RecordThread(QThread):
 
     def __init__(
         self,
-        duration_s: float = 3.5,
+        duration_s: float = 8.0,
         sample_rate: int = 16_000,
     ) -> None:
         super().__init__()
