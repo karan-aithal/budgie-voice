@@ -27,6 +27,8 @@ pip install \
     "speechbrain>=1.0.0" \
     "PyQt6>=6.6.0" \
     "pyqtgraph>=0.13.3" \
+    "pynput>=1.7.6" \
+    "qasync>=0.27.0" \
     "pytest>=8.0.0" \
     "pytest-asyncio>=0.23.0"
 
