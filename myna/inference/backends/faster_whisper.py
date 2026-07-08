@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import uuid
 from pathlib import Path
 from typing import AsyncIterator
@@ -31,7 +32,7 @@ class FasterWhisperBackend(InferenceBackend):
         self._model: object | None = None
         self._model_name: str = "small"
         self._language: str = "en"
-        self._beam_size: int = 1
+        self._beam_size: int = 5
 
     # ------------------------------------------------------------------
     # InferenceBackend interface
@@ -145,8 +146,9 @@ class FasterWhisperBackend(InferenceBackend):
         )
         results: list[TranscriptSegment] = []
         for seg in segments_iter:
-            # avg_logprob in (-inf, 0]; map (-1, 0) → (0, 1) approximately
-            confidence = min(1.0, max(0.0, seg.avg_logprob + 1.0))
+            # exp(avg_logprob) maps log-probability to (0, 1] — properly calibrated.
+            # avg_logprob=-0.5 → conf=0.61, avg_logprob=-1.0 → conf=0.37
+            confidence = math.exp(seg.avg_logprob)
             text = seg.text.strip()
             if text:
                 results.append(

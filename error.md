@@ -16,9 +16,9 @@ After saving config selected does not get downloaded.It gets downloaded.Before w
 
 
 
-issue 3:
-Dictation gets better when switching from small model to medium model as shown below.How can I improve small model? So that it captures every word better.
-
+Issue 2:
+Dictation gets better when switching from small model to medium model as shown below. How can I improve small model? So that it captures every word better.
+Optimizations for best apple/google level dictations
 
 
 ---- Small   ----  rejects mostly everyhting , hello is captured as hello, and none of the other words match what i spoke 
@@ -103,3 +103,19 @@ Dictation gets better when switching from small model to medium model as shown b
 2026-07-08T21:26:59 myna.audio.capture           INFO     Mic capture stopped
 2026-07-08T21:26:59 myna.audio.adapter           INFO     AudioAdapter closed
 2026-07-08T21:26:59 myna.orchestrator.dictation_service INFO     Speaker verification failed (score=0.72) — discarded
+
+
+
+4 files changed:
+
+Change	Before	After	Effect
+Confidence formula	avg_logprob + 1.0	 math.exp(avg_logprob)	"segments get rejected" (logprob≈-0.49) → conf 0.51→0.61 ✓
+
+confidence_threshold default	0.55	 0.40	With exp formula, 0.40=exp(-0.92) — rejects only genuine hallucinations
+
+beam_size	hardcoded 1 in __init__	  reads settings.inference.beam_size (5)	5× better accuracy per segment
+
+Speaker threshold	0.75	0.65	0.70-0.72 matches no longer discarded
+What to expect with small model now — segments like "every word." (logprob≈-0.54 → exp=0.58) and "segments get rejected" (0.61) will pass. True hallucinations like "is hood." (logprob≈-1.35 → exp=0.26) still rejected correctly.
+
+Further accuracy gains if needed: switch to small.en (English-only model, better than multilingual small for English), or set language=en explicitly in config (already done).

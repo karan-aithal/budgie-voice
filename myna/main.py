@@ -57,7 +57,12 @@ async def main_async() -> None:
     # Inference backend + server
     # ------------------------------------------------------------------
     backend = get_backend(settings.inference.backend)
-    await backend.load(settings.inference.model, settings.inference.device, settings.inference.compute_type)
+    await backend.load(
+        settings.inference.model,
+        settings.inference.device,
+        settings.inference.compute_type,
+        beam_size=settings.inference.beam_size,
+    )
 
     server = InferenceServer(backend, port=settings.inference.server_port)
     server.start()
@@ -141,7 +146,12 @@ async def main_async() -> None:
                 old_inf.model, new_inf.model,
             )
             asyncio.run_coroutine_threadsafe(
-                server.reload_backend(new_inf.model, new_inf.device, new_inf.compute_type),
+                server.reload_backend(
+                    new_inf.model,
+                    new_inf.device,
+                    new_inf.compute_type,
+                    beam_size=new_inf.beam_size,
+                ),
                 loop,
             )
 

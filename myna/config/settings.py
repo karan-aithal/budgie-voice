@@ -53,7 +53,7 @@ class InferenceSettings:
     device: str = "auto"
     compute_type: str = "int8"
     language: str = "en"
-    confidence_threshold: float = 0.55
+    confidence_threshold: float = 0.40
     beam_size: int = 5
 
 
@@ -63,7 +63,7 @@ class SpeakerSettings:
 
     enabled: bool = True
     voiceprint_path: str = "~/.config/myna/voiceprint.pt"
-    threshold: float = 0.75
+    threshold: float = 0.65
     min_samples: int = 5
 
 
