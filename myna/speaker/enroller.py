@@ -33,7 +33,7 @@ from myna.speaker.verifier import SpeakerVerifier
 
 _LOG = logging.getLogger(__name__)
 
-_N_CLIPS = 3
+_N_CLIPS = 10
 _SAMPLE_RATE = 16_000
 _VOICEPRINT_PATH = Path.home() / ".config" / "myna" / "voiceprint.pt"
 
@@ -89,7 +89,7 @@ class _RecordingPage(QWizardPage):
     def _start_record(self) -> None:
         self._record_btn.setEnabled(False)
         self._status.setText("🔴 Recording… speak now!")
-        self._worker = RecordWorker(duration_s=5.0)
+        self._worker = RecordWorker(duration_s=8.0)
         self._worker.finished.connect(self._on_recorded)
         self._worker.error.connect(self._on_error)
         self._worker.start()

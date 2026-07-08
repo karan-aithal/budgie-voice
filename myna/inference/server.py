@@ -149,7 +149,7 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
         if msg.get("is_end_of_speech") and buffer:
             combined = np.concatenate(buffer)
             buffer.clear()
-            async for seg in _transcribe(backend, combined, language):
+            for seg in await _transcribe(backend, combined, language):
                 await ws.send_text(
                     json.dumps(
                         {

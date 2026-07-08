@@ -48,12 +48,14 @@ class SpeakerVerifier:
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def load(self) -> None:
-        """Load model and voiceprint.  Call once at startup (blocking)."""
-        if not self._voiceprint_path.exists():
-            _LOG.info("Voiceprint not found at %s — speaker verify disabled", self._voiceprint_path)
-            return
+    def load_model(self) -> None:
+        """Load the ECAPA model only (no voiceprint required).
 
+        Safe to call multiple times — no-op if already loaded.
+        Use this before enrollment when no voiceprint exists yet.
+        """
+        if self._model is not None:
+            return
         try:
             from speechbrain.inference.speaker import EncoderClassifier  # noqa: PLC0415
 
@@ -62,6 +64,18 @@ class SpeakerVerifier:
                 run_opts={"device": "cpu"},
                 savedir=str(Path.home() / ".cache" / "myna" / "speechbrain"),
             )
+            _LOG.info("SpeakerVerifier model loaded")
+        except Exception as exc:
+            raise MynaSpeakerError(f"Failed to load speaker model: {exc}") from exc
+
+    def load(self) -> None:
+        """Load model and voiceprint.  Call once at startup (blocking)."""
+        if not self._voiceprint_path.exists():
+            _LOG.info("Voiceprint not found at %s — speaker verify disabled", self._voiceprint_path)
+            return
+
+        try:
+            self.load_model()
             vp_tensor: torch.Tensor = torch.load(
                 self._voiceprint_path, map_location="cpu", weights_only=True
             )

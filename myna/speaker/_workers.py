@@ -15,7 +15,7 @@ from PyQt6.QtCore import QThread, pyqtSignal
 _LOG = logging.getLogger(__name__)
 
 _SAMPLE_RATE = 16_000
-_RECORD_SECONDS = 5
+_RECORD_SECONDS = 8
 
 
 class RecordWorker(QThread):
@@ -72,6 +72,7 @@ class EnrollWorker(QThread):
             from myna.speaker.verifier import SpeakerVerifier  # noqa: PLC0415
 
             v: SpeakerVerifier = self._verifier  # type: ignore[assignment]
+            v.load_model()  # no-op if already loaded; loads model without needing a voiceprint
             embeddings = [v.get_embedding(r) for r in self._recordings]
             mean_emb = np.mean(embeddings, axis=0).astype(np.float32)
             norm = np.linalg.norm(mean_emb)
