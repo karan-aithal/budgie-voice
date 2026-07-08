@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Callable
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont, QPainter, QPixmap
+from PyQt6.QtGui import QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 _LOG = logging.getLogger(__name__)
@@ -125,7 +125,7 @@ class TrayIcon(QSystemTrayIcon):
 
     def _update_icon(self, state: TrayState) -> None:
         emoji, tooltip = _STATE_CONFIG.get(state, ("⚫", "Myna"))
-        self.setIcon(_emoji_pixmap(emoji))  # type: ignore[call-arg]
+        self.setIcon(QIcon(_emoji_pixmap(emoji)))  # type: ignore[call-arg]
         self.setToolTip(tooltip)
 
     def _build_menu(

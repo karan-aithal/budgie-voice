@@ -48,3 +48,4 @@ Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
 2026-07-08T15:48:40 myna.inference.client        INFO     InferenceClient disconnected
 2026-07-08T15:48:40 myna.inference.server        INFO     InferenceServer stopping
 2026-07-08T15:48:40 __main__                     INFO     Shutdown complete
+
