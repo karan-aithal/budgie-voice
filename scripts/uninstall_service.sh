@@ -1,43 +1,32 @@
 #!/usr/bin/env bash
-# uninstall_service.sh — stop, disable, and remove the systemd user service
-#
-# The install directory (~/.local/lib/voice-assistant/) is NOT removed
-# automatically; remove manually if desired.
-#
-# Run from anywhere:
-#   bash scripts/uninstall_service.sh
+# Myna — stop, disable, and remove the systemd user service
+# Config (~/.config/myna/) and logs (~/.local/share/myna/) are preserved.
 set -euo pipefail
 
-SERVICE_FILE="${HOME}/.config/systemd/user/voice-assistant.service"
-INSTALL_DIR="${HOME}/.local/lib/voice-assistant"
+SERVICE="myna"
+SERVICE_FILE="${HOME}/.config/systemd/user/${SERVICE}.service"
+INSTALL_DIR="${HOME}/.local/lib/myna"
 
-echo "=== Voice Assistant — Service Uninstall ==="
+echo "=== Myna — Uninstall ==="
 
-# ── Stop ──────────────────────────────────────────────────────────────────────
-if systemctl --user is-active --quiet voice-assistant 2>/dev/null; then
-    echo "Stopping service …"
-    systemctl --user stop voice-assistant
-else
-    echo "Service not running — skipping stop."
-fi
+systemctl --user stop    "${SERVICE}" 2>/dev/null || true
+systemctl --user disable "${SERVICE}" 2>/dev/null || true
 
-# ── Disable ───────────────────────────────────────────────────────────────────
-if systemctl --user is-enabled --quiet voice-assistant 2>/dev/null; then
-    echo "Disabling service …"
-    systemctl --user disable voice-assistant
-else
-    echo "Service not enabled — skipping disable."
-fi
-
-# ── Remove unit file ──────────────────────────────────────────────────────────
-if [ -f "${SERVICE_FILE}" ]; then
+if [[ -f "${SERVICE_FILE}" ]]; then
     rm -f "${SERVICE_FILE}"
     echo "Removed ${SERVICE_FILE}"
-else
-    echo "Unit file not found — skipping."
 fi
 
 systemctl --user daemon-reload
+
+rm -rf "${INSTALL_DIR}"
+echo "Removed ${INSTALL_DIR}"
+
+echo ""
+echo "✓ Myna uninstalled."
+echo "  Config preserved : ~/.config/myna/"
+echo "  Logs preserved   : ~/.local/share/myna/logs/"
+echo "  Remove manually if desired."
 
 echo ""
 echo "✓ Service removed."
