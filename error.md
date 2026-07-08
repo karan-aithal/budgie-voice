@@ -1,51 +1,105 @@
-python3.12 -m myna.main
-2026-07-08T15:47:59 __main__                     INFO     Myna starting (Phase 4)
-2026-07-08T15:48:00 myna.inference.backends.faster_whisper INFO     FasterWhisperBackend ready: small on auto (int8)
-2026-07-08T15:48:00 myna.inference.server        INFO     InferenceServer running on 127.0.0.1:18000
-2026-07-08T15:48:01 myna.inference.client        INFO     InferenceClient connected → ws://127.0.0.1:18000/ws/transcribe
-2026-07-08T15:48:01 myna.audio.denoiser          INFO     DenoiseFilter enabled (noisereduce)
-2026-07-08T15:48:01 myna.injection.selector      INFO     Injection backend selected: ibus
-2026-07-08T15:48:01 speechbrain.utils.quirks     INFO     Applied quirks (see `speechbrain.utils.quirks`): [disable_jit_profiling, allow_tf32]
-2026-07-08T15:48:01 speechbrain.utils.quirks     INFO     Excluded quirks specified by the `SB_DISABLE_QUIRKS` environment (comma-separated list): []
-2026-07-08T15:48:01 speechbrain.utils.fetching   INFO     Fetch hyperparams.yaml: Fetching from HuggingFace Hub 'speechbrain/spkrec-ecapa-voxceleb' if not cached
-2026-07-08T15:48:02 speechbrain.utils.fetching   INFO     Fetch custom.py: Fetching from HuggingFace Hub 'speechbrain/spkrec-ecapa-voxceleb' if not cached
-/home/xlr8/2CODE/myna-voice/.venv/lib/python3.12/site-packages/speechbrain/utils/autocast.py:68: FutureWarning: `torch.cuda.amp.custom_fwd(args...)` is deprecated. Please use `torch.amp.custom_fwd(args..., device_type='cuda')` instead.
-  wrapped_fwd = torch.cuda.amp.custom_fwd(fwd, cast_inputs=cast_inputs)
-2026-07-08T15:48:02 speechbrain.utils.fetching   INFO     Fetch embedding_model.ckpt: Fetching from HuggingFace Hub 'speechbrain/spkrec-ecapa-voxceleb' if not cached
-2026-07-08T15:48:02 speechbrain.utils.fetching   INFO     Fetch mean_var_norm_emb.ckpt: Fetching from HuggingFace Hub 'speechbrain/spkrec-ecapa-voxceleb' if not cached
-2026-07-08T15:48:02 speechbrain.utils.fetching   INFO     Fetch classifier.ckpt: Fetching from HuggingFace Hub 'speechbrain/spkrec-ecapa-voxceleb' if not cached
-2026-07-08T15:48:03 speechbrain.utils.fetching   INFO     Fetch label_encoder.txt: Fetching from HuggingFace Hub 'speechbrain/spkrec-ecapa-voxceleb' if not cached
-2026-07-08T15:48:03 speechbrain.utils.parameter_transfer INFO     Loading pretrained files for: embedding_model, mean_var_norm_emb, classifier, label_encoder
-/home/xlr8/2CODE/myna-voice/.venv/lib/python3.12/site-packages/speechbrain/utils/checkpoints.py:200: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which usesthe default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  state_dict = torch.load(path, map_location=device)
-/home/xlr8/2CODE/myna-voice/.venv/lib/python3.12/site-packages/speechbrain/processing/features.py:1311: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
-  stats = torch.load(path, map_location=device)
-2026-07-08T15:48:03 myna.speaker.verifier        INFO     SpeakerVerifier model loaded
-2026-07-08T15:48:03 myna.speaker.verifier        INFO     SpeakerVerifier loaded (threshold=0.75)
-2026-07-08T15:48:03 myna.dbus.service            INFO     dbus-python / gi not available — DBus service disabled
-2026-07-08T15:48:03 __main__                     INFO     Tray unavailable (setIcon(self, icon: QIcon): argument 1 has unexpected type 'QPixmap') — headless mode
-2026-07-08T15:48:03 myna.orchestrator.hotkey     INFO     HotkeyManager started — mode=toggle hotkey=ctrl+space
-Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
-2026-07-08T15:48:09 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
-2026-07-08T15:48:10 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device=None
-2026-07-08T15:48:10 myna.audio.adapter           INFO     AudioAdapter opened
-2026-07-08T15:48:10 __main__                     INFO     State → recording
-2026-07-08T15:48:11 faster_whisper               INFO     Processing audio with duration 00:00.330
-2026-07-08T15:48:16 faster_whisper               INFO     Processing audio with duration 00:03.810
-2026-07-08T15:48:17 faster_whisper               INFO     Processing audio with duration 00:01.080
-2026-07-08T15:48:21 faster_whisper               INFO     Processing audio with duration 00:01.110
-2026-07-08T15:48:24 faster_whisper               INFO     Processing audio with duration 00:03.270
-2026-07-08T15:48:27 faster_whisper               INFO     Processing audio with duration 00:01.830
-2026-07-08T15:48:28 faster_whisper               INFO     Processing audio with duration 00:00.390
-2026-07-08T15:48:31 faster_whisper               INFO     Processing audio with duration 00:01.560
-2026-07-08T15:48:33 faster_whisper               INFO     Processing audio with duration 00:01.320
-2026-07-08T15:48:36 faster_whisper               INFO     Processing audio with duration 00:02.010
-2026-07-08T15:48:36 faster_whisper               INFO     Processing audio with duration 00:00.330
-2026-07-08T15:48:37 faster_whisper               INFO     Processing audio with duration 00:00.330
-^C2026-07-08T15:48:40 myna.audio.capture           INFO     Mic capture stopped
-2026-07-08T15:48:40 myna.audio.adapter           INFO     AudioAdapter closed
-2026-07-08T15:48:40 __main__                     INFO     State → idle
-2026-07-08T15:48:40 myna.inference.client        INFO     InferenceClient disconnected
-2026-07-08T15:48:40 myna.inference.server        INFO     InferenceServer stopping
-2026-07-08T15:48:40 __main__                     INFO     Shutdown complete
 
+Issue 1:
+When settings ui is opened and model changed from small to medium and save and close the window doesnt close and gets stuck
+
+Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
+2026-07-08T21:13:57 myna.settings_ui.window      INFO     Settings saved to /home/xlr8/.config/myna/config.yaml
+2026-07-08T21:14:22 dbus.proxies                 ERROR    Introspect error on :1.695:/com/canonical/Myna: dbus.exceptions.DBusException: org.freedesktop.DBus.Error.NoReply: Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken.
+2026-07-08T21:14:47 myna.config.settings         INFO     Config loaded from /home/xlr8/.config/myna/config.yaml
+2026-07-08T21:14:47 __main__                     INFO     Settings reloaded via DBus
+2026-07-08T21:14:47 myna.orchestrator.dictation_service WARNING  Recv loop error: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+
+
+issue 2:
+After saving config selected does not get downloaded.It gets downloaded.Before we can close the window.
+
+
+
+
+issue 3:
+Dictation gets better when switching from small model to medium model as shown below.How can I improve small model? So that it captures every word better.
+
+
+
+---- Small   ----  rejects mostly everyhting , hello is captured as hello, and none of the other words match what i spoke 
+2026-07-08T20:58:55 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
+2026-07-08T20:58:55 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device=None
+2026-07-08T20:58:55 myna.audio.adapter           INFO     AudioAdapter opened
+2026-07-08T20:59:01 faster_whisper               INFO     Processing audio with duration 00:00.900
+2026-07-08T20:59:01 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.34 < 0.55: 'Aloha.'
+2026-07-08T20:59:06 faster_whisper               INFO     Processing audio with duration 00:01.770
+2026-07-08T20:59:07 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.40 < 0.55: "I'm in the washroom."
+2026-07-08T20:59:10 faster_whisper               INFO     Processing audio with duration 00:00.360
+2026-07-08T20:59:11 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.14 < 0.55: 'Thank you.'
+2026-07-08T20:59:12 faster_whisper               INFO     Processing audio with duration 00:01.290
+2026-07-08T20:59:12 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.05 < 0.55: 'is hood.'
+2026-07-08T20:59:17 faster_whisper               INFO     Processing audio with duration 00:00.330
+2026-07-08T20:59:17 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.01 < 0.55: 'the war.'
+2026-07-08T20:59:18 faster_whisper               INFO     Processing audio with duration 00:00.900
+2026-07-08T20:59:21 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.00 < 0.55: "I'll see you soon."
+2026-07-08T20:59:21 faster_whisper               INFO     Processing audio with duration 00:00.330
+2026-07-08T20:59:21 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.20 < 0.55: 'Thank you.'
+2026-07-08T20:59:33 faster_whisper               INFO     Processing audio with duration 00:01.770
+2026-07-08T20:59:33 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.79: "Aloha, I'm in the washroom."
+2026-07-08T20:59:38 faster_whisper               INFO     Processing audio with duration 00:01.590
+2026-07-08T20:59:39 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.37 < 0.55: 'Thank you.'
+2026-07-08T20:59:43 faster_whisper               INFO     Processing audio with duration 00:01.260
+2026-07-08T20:59:44 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.35 < 0.55: 'should the war'
+2026-07-08T20:59:57 faster_whisper               INFO     Processing audio with duration 00:01.590
+2026-07-08T21:00:00 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.00 < 0.55: 'All right, captured, start to do it.'
+2026-07-08T21:00:08 faster_whisper               INFO     Processing audio with duration 00:04.230
+2026-07-08T21:00:09 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.62: 'mic capture started, audio adapter opened.'
+
+
+
+--- Medium --- model -- better but still correct captured segments gets rejected due to conf , and speaker verification fails 
+2026-07-08T21:24:11 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device=None
+2026-07-08T21:24:11 myna.audio.adapter           INFO     AudioAdapter opened
+2026-07-08T21:24:13 faster_whisper               INFO     Processing audio with duration 00:01.860
+2026-07-08T21:24:15 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.72: 'dictation gets better'
+2026-07-08T21:24:16 faster_whisper               INFO     Processing audio with duration 00:03.210
+2026-07-08T21:24:19 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.82: 'when switching from small model to medium model.'
+2026-07-08T21:24:20 faster_whisper               INFO     Processing audio with duration 00:01.170
+2026-07-08T21:24:22 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.47 < 0.55: 'but still.'
+2026-07-08T21:24:23 faster_whisper               INFO     Processing audio with duration 00:02.250
+2026-07-08T21:24:25 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.51 < 0.55: 'segments get rejected'
+2026-07-08T21:24:26 faster_whisper               INFO     Processing audio with duration 00:01.140
+2026-07-08T21:24:28 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.77: 'as shown below.'
+2026-07-08T21:24:39 faster_whisper               INFO     Processing audio with duration 00:01.500
+2026-07-08T21:24:41 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.90: 'How can I improve?'
+2026-07-08T21:24:41 faster_whisper               INFO     Processing audio with duration 00:01.440
+2026-07-08T21:24:43 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.10 < 0.55: 'small module'
+2026-07-08T21:24:45 faster_whisper               INFO     Processing audio with duration 00:01.440
+2026-07-08T21:24:47 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.65: 'so that it'
+2026-07-08T21:24:48 faster_whisper               INFO     Processing audio with duration 00:01.080
+2026-07-08T21:24:50 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.46 < 0.55: 'Captures.'
+2026-07-08T21:24:51 faster_whisper               INFO     Processing audio with duration 00:01.170
+2026-07-08T21:24:53 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.51 < 0.55: 'every word.'
+2026-07-08T21:24:53 faster_whisper               INFO     Processing audio with duration 00:00.750
+2026-07-08T21:24:55 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.59: 'better.'
+2026-07-08T21:25:01 myna.audio.capture           INFO     Mic capture stopped
+2026-07-08T21:25:01 myna.audio.adapter           INFO     AudioAdapter closed
+2026-07-08T21:25:02 myna.orchestrator.dictation_service INFO     Injecting: conf=0.72 'Dictation gets better'
+2026-07-08T21:25:02 myna.orchestrator.dictation_service INFO     Injecting: conf=0.82 'When switching from small model to medium model.'
+2026-07-08T21:25:02 myna.orchestrator.dictation_service INFO     Injecting: conf=0.77 'As shown below.'
+2026-07-08T21:25:02 myna.orchestrator.dictation_service INFO     Injecting: conf=0.90 'How can I improve?'
+2026-07-08T21:25:02 myna.orchestrator.dictation_service INFO     Injecting: conf=0.65 'So that it'
+2026-07-08T21:25:02 myna.orchestrator.dictation_service INFO     Injecting: conf=0.59 'Better.'
+2026-07-08T21:26:25 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
+2026-07-08T21:26:25 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device=None
+2026-07-08T21:26:25 myna.audio.adapter           INFO     AudioAdapter opened
+2026-07-08T21:26:26 faster_whisper               INFO     Processing audio with duration 00:00.840
+2026-07-08T21:26:28 myna.orchestrator.dictation_service INFO     Segment rejected conf=0.24 < 0.55: 'Also.'
+2026-07-08T21:26:29 faster_whisper               INFO     Processing audio with duration 00:03.060
+2026-07-08T21:26:31 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.60: 'The medium model still rejects certain words.'
+2026-07-08T21:26:36 myna.audio.capture           INFO     Mic capture stopped
+2026-07-08T21:26:36 myna.audio.adapter           INFO     AudioAdapter closed
+2026-07-08T21:26:36 myna.orchestrator.dictation_service INFO     Speaker verification failed (score=0.70) — discarded
+2026-07-08T21:26:48 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
+2026-07-08T21:26:48 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device=None
+2026-07-08T21:26:48 myna.audio.adapter           INFO     AudioAdapter opened
+2026-07-08T21:26:53 faster_whisper               INFO     Processing audio with duration 00:03.480
+2026-07-08T21:26:55 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.80: 'Also the medium module still rejects certain words.'
+2026-07-08T21:26:59 myna.audio.capture           INFO     Mic capture stopped
+2026-07-08T21:26:59 myna.audio.adapter           INFO     AudioAdapter closed
+2026-07-08T21:26:59 myna.orchestrator.dictation_service INFO     Speaker verification failed (score=0.72) — discarded
