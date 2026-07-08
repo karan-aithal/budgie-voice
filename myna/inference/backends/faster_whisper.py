@@ -1,0 +1,162 @@
+"""FasterWhisperBackend — local CPU/GPU inference via faster-whisper."""
+from __future__ import annotations
+
+import asyncio
+import logging
+import uuid
+from pathlib import Path
+from typing import AsyncIterator
+
+import numpy as np
+
+from myna.inference.backends.base import BackendCapabilities, InferenceBackend
+from myna.inference.protocol import TranscriptSegment
+from myna.utils.exceptions import MynaInferenceError
+
+_LOG = logging.getLogger(__name__)
+
+_SUPPORTED_MODELS = ["tiny", "tiny.en", "small", "small.en", "medium", "medium.en", "large-v3"]
+_SUPPORTED_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "zh", "ja", "ko", "ar"]
+
+
+class FasterWhisperBackend(InferenceBackend):
+    """STT backend wrapping faster-whisper.
+
+    Transcription runs in a thread-pool executor to avoid blocking the
+    event loop. The backend accumulates all audio frames for a speech
+    turn and transcribes them as a single batch.
+    """
+
+    def __init__(self) -> None:
+        self._model: object | None = None
+        self._model_name: str = "small"
+        self._language: str = "en"
+        self._beam_size: int = 1
+
+    # ------------------------------------------------------------------
+    # InferenceBackend interface
+    # ------------------------------------------------------------------
+
+    async def load(self, model: str, device: str, compute_type: str) -> None:
+        """Load WhisperModel in a thread-pool executor.
+
+        Args:
+            model: Model size identifier.
+            device: ``"auto"``, ``"cpu"``, or ``"cuda"``.
+            compute_type: Quantisation type (``"int8"``, ``"float16"``…).
+
+        Raises:
+            MynaInferenceError: Model download or initialisation fails.
+        """
+        self._model_name = model
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._load_sync, model, device, compute_type)
+        _LOG.info("FasterWhisperBackend ready: %s on %s (%s)", model, device, compute_type)
+
+    async def transcribe_stream(
+        self,
+        audio_frames: AsyncIterator[np.ndarray],
+        language: str,
+    ) -> AsyncIterator[TranscriptSegment]:
+        """Accumulate audio frames then transcribe as one batch.
+
+        Args:
+            audio_frames: Async iterator of 1-D float32 arrays at 16 kHz.
+            language: BCP-47 language hint.
+
+        Yields:
+            Final :class:`~myna.inference.protocol.TranscriptSegment` per sentence.
+
+        Raises:
+            MynaInferenceError: Model not loaded or transcription fails.
+        """
+        if self._model is None:
+            raise MynaInferenceError("FasterWhisperBackend: call load() first")
+
+        buffer: list[np.ndarray] = []
+        async for frame in audio_frames:
+            buffer.append(frame)
+
+        if not buffer:
+            return
+
+        audio = np.concatenate(buffer).astype(np.float32)
+        loop = asyncio.get_running_loop()
+        segments = await loop.run_in_executor(None, self._transcribe_sync, audio, language)
+
+        for seg in segments:
+            yield seg
+
+    async def unload(self) -> None:
+        """Release model from memory."""
+        self._model = None
+        _LOG.info("FasterWhisperBackend unloaded")
+
+    async def capabilities(self) -> BackendCapabilities:
+        """Return backend capabilities."""
+        return BackendCapabilities(
+            version=self.interface_version,
+            supported_languages=_SUPPORTED_LANGUAGES,
+            supported_models=_SUPPORTED_MODELS,
+            supports_streaming=True,
+            supports_gpu=True,
+        )
+
+    @property
+    def is_ready(self) -> bool:
+        return self._model is not None
+
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+
+    def _load_sync(self, model: str, device: str, compute_type: str) -> None:
+        from faster_whisper import WhisperModel  # noqa: PLC0415
+
+        resolved_device = device
+        if device == "auto":
+            try:
+                import torch  # noqa: PLC0415
+
+                resolved_device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                resolved_device = "cpu"
+
+        cache = Path.home() / ".cache" / "myna" / "models"
+        cache.mkdir(parents=True, exist_ok=True)
+
+        try:
+            self._model = WhisperModel(
+                model,
+                device=resolved_device,
+                compute_type=compute_type,
+                download_root=str(cache),
+            )
+        except Exception as exc:
+            raise MynaInferenceError(f"Failed to load WhisperModel '{model}': {exc}") from exc
+
+    def _transcribe_sync(self, audio: np.ndarray, language: str) -> list[TranscriptSegment]:
+        segments_iter, info = self._model.transcribe(  # type: ignore[union-attr]
+            audio,
+            language=language,
+            beam_size=self._beam_size,
+            without_timestamps=True,
+            condition_on_previous_text=False,
+        )
+        results: list[TranscriptSegment] = []
+        for seg in segments_iter:
+            # avg_logprob in (-inf, 0]; map (-1, 0) → (0, 1) approximately
+            confidence = min(1.0, max(0.0, seg.avg_logprob + 1.0))
+            text = seg.text.strip()
+            if text:
+                results.append(
+                    TranscriptSegment(
+                        text=text,
+                        confidence=confidence,
+                        is_final=True,
+                        language=info.language,
+                        segment_id=str(uuid.uuid4()),
+                    )
+                )
+                _LOG.debug("Transcribed: conf=%.2f lang=%s", confidence, info.language)
+        return results

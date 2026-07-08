@@ -1,6 +1,6 @@
-# Voice Assistant — example configuration
-# Copy to: ~/.config/voice-assistant/config.yaml
-# (Done automatically on first run if the file is absent.)
+# Myna — Voice Typing Assistant — example configuration
+# Copy to: ~/.config/myna/config.yaml
+# Myna uses defaults for any key not present.
 
 hotkey:
   toggle_listen: "ctrl+space"   # Any combo parseable by pynput
