@@ -145,6 +145,7 @@ class DictationService:
             for seg in self._pending:
                 text = self._pipeline.run(seg.text)
                 if text:
+                    _LOG.info("Injecting: conf=%.2f %r", seg.confidence, text[:80])
                     await self._injector.start_session(self._session.target_window_id)
                     await self._injector.commit_text(text)
                     await self._injector.end_session()
@@ -190,11 +191,12 @@ class DictationService:
                 if not self._session.is_active or not seg.is_final:
                     continue
                 if seg.confidence < threshold:
-                    _LOG.debug("Low conf %.2f — skipped", seg.confidence)
+                    _LOG.info("Segment rejected conf=%.2f < %.2f: %r", seg.confidence, threshold, seg.text[:40])
                     await _notify(self._settings, self._settings.notifications.low_confidence_message)
                     if self._on_low_confidence is not None:
                         self._on_low_confidence()
                     continue
+                _LOG.info("Segment accepted conf=%.2f: %r", seg.confidence, seg.text[:60])
                 self._pending.append(seg)
         except asyncio.CancelledError:
             pass
