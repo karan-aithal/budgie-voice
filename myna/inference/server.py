@@ -90,6 +90,16 @@ class InferenceServer:
             self._uvicorn.should_exit = True
         _LOG.info("InferenceServer stopping")
 
+    async def reload_backend(self, model: str, device: str, compute_type: str) -> None:
+        """Hot-swap the backend model without restarting the server.
+
+        In-flight transcriptions continue on the old model object; the new
+        model is assigned atomically when loading completes.
+        """
+        _LOG.info("Hot-reloading backend: %s (%s / %s)", model, device, compute_type)
+        await self._backend.load(model, device, compute_type)
+        _LOG.info("Backend hot-reload complete: %s", model)
+
     # ------------------------------------------------------------------
     # FastAPI app
     # ------------------------------------------------------------------

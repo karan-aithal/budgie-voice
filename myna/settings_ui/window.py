@@ -257,9 +257,15 @@ class SettingsWindow(QDialog):
             import dbus  # noqa: PLC0415
 
             bus = dbus.SessionBus()
-            obj = bus.get_object("com.canonical.Myna", "/com/canonical/Myna")
-            dbus.Interface(obj, "com.canonical.Myna").Reload()
-        except Exception:
-            pass
+            # introspect=False skips the blocking introspection round-trip.
+            obj = bus.get_object("com.canonical.Myna", "/com/canonical/Myna", introspect=False)
+            # Fire-and-forget: reply/error handlers make the call non-blocking
+            # so the Qt main thread is never frozen waiting for the reply.
+            dbus.Interface(obj, "com.canonical.Myna").Reload(
+                reply_handler=lambda: None,
+                error_handler=lambda e: _LOG.debug("DBus Reload error: %s", e),
+            )
+        except Exception as exc:
+            _LOG.debug("DBus notify skipped: %s", exc)
 
         self.accept()

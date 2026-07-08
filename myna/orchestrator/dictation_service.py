@@ -185,23 +185,29 @@ class DictationService:
             _LOG.warning("Send loop error: %s", exc)
 
     async def _recv_loop(self) -> None:
-        threshold = self._settings.inference.confidence_threshold
-        try:
-            async for seg in self._client.receive_segments():
-                if not self._session.is_active or not seg.is_final:
-                    continue
-                if seg.confidence < threshold:
-                    _LOG.info("Segment rejected conf=%.2f < %.2f: %r", seg.confidence, threshold, seg.text[:40])
-                    await _notify(self._settings, self._settings.notifications.low_confidence_message)
-                    if self._on_low_confidence is not None:
-                        self._on_low_confidence()
-                    continue
-                _LOG.info("Segment accepted conf=%.2f: %r", seg.confidence, seg.text[:60])
-                self._pending.append(seg)
-        except asyncio.CancelledError:
-            pass
-        except Exception as exc:
-            _LOG.warning("Recv loop error: %s", exc)
+        while True:
+            threshold = self._settings.inference.confidence_threshold
+            try:
+                async for seg in self._client.receive_segments():
+                    if not self._session.is_active or not seg.is_final:
+                        continue
+                    if seg.confidence < threshold:
+                        _LOG.info("Segment rejected conf=%.2f < %.2f: %r", seg.confidence, threshold, seg.text[:40])
+                        await _notify(self._settings, self._settings.notifications.low_confidence_message)
+                        if self._on_low_confidence is not None:
+                            self._on_low_confidence()
+                        continue
+                    _LOG.info("Segment accepted conf=%.2f: %r", seg.confidence, seg.text[:60])
+                    self._pending.append(seg)
+            except asyncio.CancelledError:
+                return
+            except Exception as exc:
+                _LOG.warning("Recv loop disconnected: %s — reconnecting in 2 s", exc)
+                await asyncio.sleep(2.0)
+                try:
+                    await self._client.connect(self._settings.inference.language)
+                except Exception as conn_exc:
+                    _LOG.warning("Reconnect failed: %s — retrying", conn_exc)
 
     # ------------------------------------------------------------------
     # Helpers

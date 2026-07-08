@@ -1,6 +1,6 @@
 
 Issue 1:
-When settings ui is opened and model changed from small to medium and save and close the window doesnt close and gets stuck
+When settings ui is opened and model changed from small to medium and save and close the window button doesnt work and gets stuck
 
 Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
 2026-07-08T21:13:57 myna.settings_ui.window      INFO     Settings saved to /home/xlr8/.config/myna/config.yaml

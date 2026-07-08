@@ -124,9 +124,26 @@ async def main_async() -> None:
     # DBus service (with settings reload)
     # ------------------------------------------------------------------
     def _reload_settings() -> None:
+        old_inf = dict_svc._settings.inference
         new = load_settings()
         dict_svc._settings = new
         _LOG.info("Settings reloaded via DBus")
+
+        new_inf = new.inference
+        if (
+            old_inf.model != new_inf.model
+            or old_inf.device != new_inf.device
+            or old_inf.compute_type != new_inf.compute_type
+            or old_inf.backend != new_inf.backend
+        ):
+            _LOG.info(
+                "Inference settings changed (%s → %s) — hot-reloading backend",
+                old_inf.model, new_inf.model,
+            )
+            asyncio.run_coroutine_threadsafe(
+                server.reload_backend(new_inf.model, new_inf.device, new_inf.compute_type),
+                loop,
+            )
 
     dbus_svc = MynaDBusService(dict_svc, loop, on_reload=_reload_settings)
     _state_cbs.append(lambda s: dbus_svc.emit_state_changed(str(s)))
