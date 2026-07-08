@@ -16,10 +16,20 @@ echo "Python: $($PYTHON --version)"
 
 # ── System packages ────────────────────────────────────────────────────────
 echo "[1/4] System packages …"
+sudo apt update
+
 sudo apt install -y \
-    xdotool ibus python3-ibus libportaudio2 portaudio19-dev \
-    libnotify-bin python3-pyqt6 python3-dbus python3-gi \
-    build-essential python3-dev
+    xdotool \
+    ibus \
+    gir1.2-ibus-1.0 \
+    libportaudio2 \
+    portaudio19-dev \
+    libnotify-bin \
+    python3-dbus \
+    python3-gi \
+    build-essential \
+    python3-dev \
+    python3-pip
 
 # ── Python packages ────────────────────────────────────────────────────────
 echo "[2/4] Python packages …"
