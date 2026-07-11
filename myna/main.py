@@ -132,6 +132,9 @@ async def main_async() -> None:
         old_inf = dict_svc._settings.inference
         new = load_settings()
         dict_svc._settings = new
+        # Propagate new audio settings into the live adapter + capture
+        adapter._audio_settings = new.audio
+        adapter._capture._settings = new.audio
         _LOG.info("Settings reloaded via DBus")
 
         new_inf = new.inference
@@ -175,7 +178,7 @@ async def main_async() -> None:
         tray = TrayIcon(
             on_toggle=dict_svc.toggle,
             on_enroll=lambda: EnrollmentWizard(verifier).show(),
-            on_settings=lambda: SettingsWindow(settings).show(),
+            on_settings=lambda: SettingsWindow(dict_svc._settings).show(),
             on_quit=stop_event.set,
             log_path=log_path,
         )
