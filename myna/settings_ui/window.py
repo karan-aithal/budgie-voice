@@ -8,6 +8,7 @@ Privacy notice is always shown at the bottom of the dialog.
 from __future__ import annotations
 
 import logging
+import subprocess
 from pathlib import Path
 
 import sounddevice as sd
@@ -21,8 +22,10 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox,
     QFormLayout,
     QGroupBox,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
+    QPushButton,
     QRadioButton,
     QScrollArea,
     QSlider,
@@ -169,19 +172,91 @@ class SettingsWindow(QDialog):
         fl = QFormLayout(box)
 
         self._mic_combo = QComboBox()
+        self._mic_device_values: list[str | None] = []
+        refresh_btn = QPushButton("↻")
+        refresh_btn.setFixedWidth(32)
+        refresh_btn.setToolTip("Refresh device list")
+        refresh_btn.clicked.connect(self._populate_mic_devices)
+
+        mic_row = QHBoxLayout()
+        mic_row.addWidget(self._mic_combo, stretch=1)
+        mic_row.addWidget(refresh_btn)
+        fl.addRow("Microphone:", mic_row)
+
+        self._populate_mic_devices()
+        return box
+
+    def _populate_mic_devices(self) -> None:
+        current_val = self._mic_combo.currentData()
+        self._mic_combo.clear()
+        self._mic_device_values = []
+
         self._mic_combo.addItem("System default", None)
+        self._mic_device_values.append(None)
+
+        # --- BT cards via pactl (shows even when in A2DP / no active source) ---
         try:
-            for dev in sd.query_devices():
-                if dev["max_input_channels"] > 0:
-                    self._mic_combo.addItem(dev["name"], dev["name"])
+            cards_out = subprocess.check_output(
+                ["pactl", "list", "cards"], timeout=5, text=True, stderr=subprocess.DEVNULL,
+            )
+            card_name = desc = ""
+            has_hfp = False
+            for line in cards_out.splitlines():
+                s = line.strip()
+                if s.startswith("Name:"):
+                    card_name = s.split(":", 1)[1].strip()
+                    has_hfp = False
+                    desc = card_name
+                elif "device.description" in s:
+                    desc = s.split("=", 1)[1].strip().strip('"')
+                elif "headset-head-unit" in s and "available: yes" in s:
+                    has_hfp = True
+                elif s == "" and card_name.startswith("bluez_card.") and has_hfp:
+                    val = f"bt:{card_name}"
+                    self._mic_combo.addItem(f"🎧 BT (HFP mic): {desc}", val)
+                    self._mic_device_values.append(val)
+                    card_name = desc = ""
+                    has_hfp = False
+            if card_name.startswith("bluez_card.") and has_hfp:
+                val = f"bt:{card_name}"
+                self._mic_combo.addItem(f"🎧 BT (HFP mic): {desc}", val)
+                self._mic_device_values.append(val)
         except Exception:
             pass
-        if self._settings.audio.device:
-            idx = self._mic_combo.findData(self._settings.audio.device)
-            if idx >= 0:
-                self._mic_combo.setCurrentIndex(idx)
-        fl.addRow("Microphone:", self._mic_combo)
-        return box
+
+        # --- Non-BT PipeWire/PA sources ---
+        try:
+            out = subprocess.check_output(
+                ["pactl", "list", "short", "sources"],
+                timeout=3, text=True, stderr=subprocess.DEVNULL,
+            )
+            for line in out.splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    src = parts[1]
+                    if src.endswith(".monitor") or "bluez" in src.lower():
+                        continue
+                    val = f"pa:{src}"
+                    self._mic_combo.addItem(f"🞧 PW: {src}", val)
+                    self._mic_device_values.append(val)
+        except Exception:
+            pass
+
+        # --- ALSA devices ---
+        try:
+            for dev in sd.query_devices():  # type: ignore[union-attr]
+                if dev["max_input_channels"] > 0:
+                    name = dev["name"]
+                    self._mic_combo.addItem(f"[ALSA] {name}", name)
+                    self._mic_device_values.append(name)
+        except Exception:
+            pass
+
+        # Restore previous selection if still present
+        restored = self._mic_combo.findData(current_val)
+        if restored < 0:
+            restored = self._mic_combo.findData(self._settings.audio.device)
+        self._mic_combo.setCurrentIndex(max(0, restored))
 
     def _speaker_group(self) -> QGroupBox:
         from myna.speaker.enroller import EnrollmentWizard  # noqa: PLC0415
@@ -194,7 +269,7 @@ class SettingsWindow(QDialog):
         self._speaker_chk.setChecked(self._settings.speaker.enabled)
         fl.addRow(self._speaker_chk)
 
-        from PyQt6.QtWidgets import QPushButton  # noqa: PLC0415
+        from PyQt6.QtWidgets import QPushButton  # noqa: PLC0415  # already imported at top
 
         enroll_btn = QPushButton("🎤  Enroll Now")
         vp = Path(self._settings.speaker.voiceprint_path).expanduser()
