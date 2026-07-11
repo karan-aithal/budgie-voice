@@ -1,22 +1,11 @@
 
 Issue 1:
-python3.12 -m myna.main
-2026-07-11T15:44:32 __main__                     INFO     Myna starting (Phase 4)
-Traceback (most recent call last):
-  File "<frozen runpy>", line 198, in _run_module_as_main
-  File "<frozen runpy>", line 88, in _run_code
-  File "/home/xlr8/2CODE/myna-voice/myna/main.py", line 269, in <module>
-    main()
-  File "/home/xlr8/2CODE/myna-voice/myna/main.py", line 257, in main
-    loop.run_until_complete(main_async())
-  File "/home/xlr8/2CODE/myna-voice/.venv/lib/python3.12/site-packages/qasync/__init__.py", line 438, in run_until_complete
-    return future.result()
-           ^^^^^^^^^^^^^^^
-  File "/home/xlr8/2CODE/myna-voice/myna/main.py", line 60, in main_async
-    await backend.load(
-          ^^^^^^^^^^^^^
-TypeError: FasterWhisperBackend.load() got an unexpected keyword argument 'beam_size'
 
+2026-07-11T17:36:37 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.75: 'These two things are important.'
+
+but 
+
+2026-07-11T17:36:40 myna.orchestrator.dictation_service INFO     Injecting: conf=0.75 'These 2'
 
 issue 2:
 After saving config selected does not get downloaded.It gets downloaded.Before we can close the window.
