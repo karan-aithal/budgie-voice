@@ -28,10 +28,15 @@ EnrollWorker error: Failed to load speaker model: cannot import name '_ccallback
 2nd -- allow for mic not detected or mictest to switch from SBC -xq to msbc bluetooth earbuds
 when enrolling voice 
 
-python3.12 -m myna.speaker.enroller
-/usr/lib/python3/dist-packages/scipy/__init__.py:146: UserWarning: A NumPy version >=1.17.3 and <1.25.0 is required for this version of SciPy (detected version 2.5.1
-  warnings.warn(f"A NumPy version >={np_minversion} and <{np_maxversion}"
-  
+Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
+2026-07-11T16:19:34 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
+2026-07-11T16:19:34 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device=None
+2026-07-11T16:19:34 myna.audio.adapter           INFO     AudioAdapter opened
+/home/xlr8/2CODE/myna-voice/.venv/lib/python3.12/site-packages/noisereduce/spectralgate/nonstationary.py:70: RuntimeWarning: invalid value encountered in divide
+  sig_mult_above_thresh = (abs_sig_stft - sig_stft_smooth) / sig_stft_smooth
+2026-07-11T16:20:01 myna.audio.capture           INFO     Mic capture stopped
+2026-07-11T16:20:01 myna.audio.adapter           INFO     AudioAdapter closed
+
 
 Issue 2:
 Dictation gets better when switching from small model to medium model as shown below. How can I improve small model? So that it captures every word better.
