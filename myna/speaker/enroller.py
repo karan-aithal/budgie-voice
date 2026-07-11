@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import logging
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -80,26 +81,78 @@ class _WelcomePage(QWizardPage):
 
     def _populate_devices(self) -> None:
         self._combo.clear()
-        self._device_ids = []
+        self._device_ids = []  # int = ALSA idx, "bt:<card>" = BT card, "pa:<src>" = PA source
+
+        # --- Bluetooth cards via pactl list cards (works even in A2DP mode) ---
+        try:
+            cards_out = subprocess.check_output(
+                ["pactl", "list", "cards"],
+                timeout=5, text=True, stderr=subprocess.DEVNULL,
+            )
+            card_name = desc = ""
+            has_hfp = False
+            for line in cards_out.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("Name:"):
+                    card_name = stripped.split(":", 1)[1].strip()
+                    has_hfp = False
+                    desc = card_name
+                elif "device.description" in stripped:
+                    # device.description = "OnePlus Buds"
+                    desc = stripped.split("=", 1)[1].strip().strip('"')
+                elif "headset-head-unit" in stripped and "available: yes" in stripped:
+                    has_hfp = True
+                elif stripped.startswith("Profiles:") or stripped.startswith("Card #"):
+                    pass
+                elif stripped == "" and card_name.startswith("bluez_card.") and has_hfp:
+                    self._combo.addItem(f"🎧 BT (HFP mic): {desc}")
+                    self._device_ids.append(f"bt:{card_name}")  # type: ignore[arg-type]
+                    card_name = desc = ""
+                    has_hfp = False
+            # flush last card
+            if card_name.startswith("bluez_card.") and has_hfp:
+                self._combo.addItem(f"🎧 BT (HFP mic): {desc}")
+                self._device_ids.append(f"bt:{card_name}")  # type: ignore[arg-type]
+        except Exception:
+            pass
+
+        # --- Other PipeWire/PA sources (non-BT, non-monitor) ---
+        try:
+            out = subprocess.check_output(
+                ["pactl", "list", "short", "sources"],
+                timeout=3, text=True, stderr=subprocess.DEVNULL,
+            )
+            for line in out.splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2:
+                    src_name = parts[1]
+                    if src_name.endswith(".monitor") or "bluez" in src_name.lower():
+                        continue
+                    self._combo.addItem(f"🞧 PW: {src_name}")
+                    self._device_ids.append(f"pa:{src_name}")  # type: ignore[arg-type]
+        except Exception:
+            pass
+
+        # --- ALSA devices via sounddevice ---
         try:
             devices = sd.query_devices()
+            for idx, dev in enumerate(devices):  # type: ignore[arg-type]
+                if dev["max_input_channels"] > 0:  # type: ignore[index]
+                    name = dev["name"]  # type: ignore[index]
+                    self._combo.addItem(f"[ALSA] {idx}: {name}")
+                    self._device_ids.append(idx)  # type: ignore[arg-type]
         except Exception:
-            self._combo.addItem("(could not query devices)")
-            return
-        for idx, dev in enumerate(devices):  # type: ignore[arg-type]
-            if dev["max_input_channels"] > 0:  # type: ignore[index]
-                name = dev["name"]  # type: ignore[index]
-                self._combo.addItem(f"{idx}: {name}")
-                self._device_ids.append(idx)
+            pass
+
         if not self._device_ids:
             self._combo.addItem("(no input devices found)")
 
-    def selected_device(self) -> int | None:
-        """Return the sounddevice index of the selected input, or None for default."""
+    def selected_device(self) -> int | str | None:
+        """Return ALSA device index (int), PA source name (str), or None for default."""
         i = self._combo.currentIndex()
         if i < 0 or i >= len(self._device_ids):
             return None
-        return self._device_ids[i]
+        return self._device_ids[i]  # type: ignore[return-value]
 
 
 class _RecordingPage(QWizardPage):
@@ -135,7 +188,7 @@ class _RecordingPage(QWizardPage):
         self._status.setText("🔴 Recording… speak now!")
         welcome: _WelcomePage = self.wizard().page(0)  # type: ignore[assignment]
         device = welcome.selected_device() if self.wizard() else None
-        self._worker = RecordWorker(duration_s=8.0, device=device)
+        self._worker = RecordWorker(duration_s=8.0, device=device)  # type: ignore[arg-type]
         self._worker.finished.connect(self._on_recorded)
         self._worker.error.connect(self._on_error)
         self._worker.start()
@@ -224,7 +277,7 @@ class _ConfirmationPage(QWizardPage):
         self._result.setText("🔴 Recording… speak now!")
         welcome: _WelcomePage = self.wizard().page(0)  # type: ignore[assignment]
         device = welcome.selected_device() if self.wizard() else None
-        self._worker = RecordWorker(duration_s=4.0, device=device)
+        self._worker = RecordWorker(duration_s=4.0, device=device)  # type: ignore[arg-type]
         self._worker.finished.connect(self._on_recorded)
         self._worker.start()
 
