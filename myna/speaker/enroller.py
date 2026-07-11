@@ -13,8 +13,12 @@ Launch standalone::
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
+
+# Re-exec under the venv interpreter if running with system Python.
+# Prevents system scipy (incompatible with NumPy ≥1.25) from being imported.
 
 import numpy as np
 from PyQt6.QtCore import Qt

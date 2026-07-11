@@ -38,18 +38,20 @@ class FasterWhisperBackend(InferenceBackend):
     # InferenceBackend interface
     # ------------------------------------------------------------------
 
-    async def load(self, model: str, device: str, compute_type: str) -> None:
+    async def load(self, model: str, device: str, compute_type: str, beam_size: int = 5) -> None:
         """Load WhisperModel in a thread-pool executor.
 
         Args:
             model: Model size identifier.
             device: ``"auto"``, ``"cpu"``, or ``"cuda"``.
             compute_type: Quantisation type (``"int8"``, ``"float16"``…).
+            beam_size: Beam width for decoding (higher = more accurate, slower).
 
         Raises:
             MynaInferenceError: Model download or initialisation fails.
         """
         self._model_name = model
+        self._beam_size = beam_size
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._load_sync, model, device, compute_type)
         _LOG.info("FasterWhisperBackend ready: %s on %s (%s)", model, device, compute_type)

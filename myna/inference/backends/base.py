@@ -40,13 +40,14 @@ class InferenceBackend(ABC):
     interface_version: str = INTERFACE_VERSION
 
     @abstractmethod
-    async def load(self, model: str, device: str, compute_type: str) -> None:
+    async def load(self, model: str, device: str, compute_type: str, beam_size: int = 5) -> None:
         """Load or initialise the model.
 
         Args:
             model: Model identifier (e.g. ``"small"``).
             device: Target device — ``"auto"``, ``"cpu"``, or ``"cuda"``.
             compute_type: Quantisation type (e.g. ``"int8"``).
+            beam_size: Beam width for decoding (higher = more accurate, slower).
         """
 
     @abstractmethod
