@@ -37,6 +37,14 @@ Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
 2026-07-11T16:20:01 myna.audio.capture           INFO     Mic capture stopped
 2026-07-11T16:20:01 myna.audio.adapter           INFO     AudioAdapter closed
 
+4: USB Audio: - (hw:1,0)5: USB Audio: #1 (hw:1,1)8: Loopback: PCM (hw:2,0)9: Loopback: PCM (hw:2,1)- 11: pipewire12: pulse13: default
+only these are available for Microphone , but still , where i have 3 input -- 
+built in audio - analog input, 
+usb audio - digital input - spdif
+Bluetooth headset oneplus
+
+I need to select bluetooth 
+
 
 Issue 2:
 Dictation gets better when switching from small model to medium model as shown below. How can I improve small model? So that it captures every word better.
