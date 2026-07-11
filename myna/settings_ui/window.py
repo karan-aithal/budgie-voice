@@ -187,7 +187,13 @@ class SettingsWindow(QDialog):
         return box
 
     def _populate_mic_devices(self) -> None:
-        current_val = self._mic_combo.currentData()
+        # On first call combo is empty — use saved setting as target.
+        # On refresh (↻) — keep the current user selection.
+        target = (
+            self._mic_combo.currentData()
+            if self._mic_combo.count() > 0
+            else self._settings.audio.device
+        )
         self._mic_combo.clear()
         self._mic_device_values = []
 
@@ -252,10 +258,8 @@ class SettingsWindow(QDialog):
         except Exception:
             pass
 
-        # Restore previous selection if still present
-        restored = self._mic_combo.findData(current_val)
-        if restored < 0:
-            restored = self._mic_combo.findData(self._settings.audio.device)
+        # Restore selection: prefer target (saved setting or current user pick)
+        restored = self._mic_combo.findData(target)
         self._mic_combo.setCurrentIndex(max(0, restored))
 
     def _speaker_group(self) -> QGroupBox:
