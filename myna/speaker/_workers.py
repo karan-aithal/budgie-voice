@@ -29,14 +29,15 @@ class RecordWorker(QThread):
     finished = pyqtSignal(object)
     error = pyqtSignal(str)
 
-    def __init__(self, duration_s: float = _RECORD_SECONDS, parent: object = None) -> None:
+    def __init__(self, duration_s: float = _RECORD_SECONDS, device: int | None = None, parent: object = None) -> None:
         super().__init__(parent)  # type: ignore[call-arg]
         self._duration = duration_s
+        self._device = device
 
     def run(self) -> None:
         try:
             frames = int(self._duration * _SAMPLE_RATE)
-            audio = sd.rec(frames, samplerate=_SAMPLE_RATE, channels=1, dtype="float32")
+            audio = sd.rec(frames, samplerate=_SAMPLE_RATE, channels=1, dtype="float32", device=self._device)
             sd.wait()
             self.finished.emit(audio.flatten().copy())
         except Exception as exc:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 
 import numpy as np
 
@@ -43,12 +44,14 @@ class DenoiseFilter:
         if not self._enabled or self._nr is None:
             return audio
         try:
-            return self._nr.reduce_noise(  # type: ignore[union-attr]
-                y=audio.astype(np.float32),
-                sr=self._sample_rate,
-                stationary=False,
-                prop_decrease=0.75,
-            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", RuntimeWarning)
+                return self._nr.reduce_noise(  # type: ignore[union-attr]
+                    y=audio.astype(np.float32),
+                    sr=self._sample_rate,
+                    stationary=False,
+                    prop_decrease=0.75,
+                )
         except Exception as exc:  # noqa: BLE001
             _LOG.debug("Denoise failed — using raw audio: %s", exc)
             return audio

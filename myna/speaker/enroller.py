@@ -21,9 +21,12 @@ from pathlib import Path
 # Prevents system scipy (incompatible with NumPy ≥1.25) from being imported.
 
 import numpy as np
+import sounddevice as sd
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
+    QComboBox,
+    QHBoxLayout,
     QLabel,
     QProgressBar,
     QPushButton,
@@ -51,15 +54,52 @@ class _WelcomePage(QWizardPage):
     def __init__(self) -> None:
         super().__init__()
         self.setTitle("Welcome to Myna Enrollment")
+
+        self._device_ids: list[int] = []
+        self._combo = QComboBox()
+        self._refresh_btn = QPushButton("↻ Refresh")
+        self._refresh_btn.setFixedWidth(90)
+        self._refresh_btn.clicked.connect(self._populate_devices)
+
+        mic_row = QHBoxLayout()
+        mic_row.addWidget(QLabel("Microphone:"))
+        mic_row.addWidget(self._combo, stretch=1)
+        mic_row.addWidget(self._refresh_btn)
+
         layout = QVBoxLayout()
         layout.addWidget(QLabel(
             "This wizard will record your voice to create a speaker profile.\n\n"
             "🔒 Privacy: All processing is local. No audio is saved to disk.\n"
             "Only a compact mathematical fingerprint (voiceprint) is stored.\n\n"
             "You will record 3 short clips of yourself speaking naturally.\n"
-            "Click Next when ready."
+            "Select your microphone below, then click Next when ready."
         ))
+        layout.addLayout(mic_row)
         self.setLayout(layout)
+        self._populate_devices()
+
+    def _populate_devices(self) -> None:
+        self._combo.clear()
+        self._device_ids = []
+        try:
+            devices = sd.query_devices()
+        except Exception:
+            self._combo.addItem("(could not query devices)")
+            return
+        for idx, dev in enumerate(devices):  # type: ignore[arg-type]
+            if dev["max_input_channels"] > 0:  # type: ignore[index]
+                name = dev["name"]  # type: ignore[index]
+                self._combo.addItem(f"{idx}: {name}")
+                self._device_ids.append(idx)
+        if not self._device_ids:
+            self._combo.addItem("(no input devices found)")
+
+    def selected_device(self) -> int | None:
+        """Return the sounddevice index of the selected input, or None for default."""
+        i = self._combo.currentIndex()
+        if i < 0 or i >= len(self._device_ids):
+            return None
+        return self._device_ids[i]
 
 
 class _RecordingPage(QWizardPage):
@@ -93,7 +133,9 @@ class _RecordingPage(QWizardPage):
     def _start_record(self) -> None:
         self._record_btn.setEnabled(False)
         self._status.setText("🔴 Recording… speak now!")
-        self._worker = RecordWorker(duration_s=8.0)
+        welcome: _WelcomePage = self.wizard().page(0)  # type: ignore[assignment]
+        device = welcome.selected_device() if self.wizard() else None
+        self._worker = RecordWorker(duration_s=8.0, device=device)
         self._worker.finished.connect(self._on_recorded)
         self._worker.error.connect(self._on_error)
         self._worker.start()
@@ -180,7 +222,9 @@ class _ConfirmationPage(QWizardPage):
     def _run_test(self) -> None:
         self._test_btn.setEnabled(False)
         self._result.setText("🔴 Recording… speak now!")
-        self._worker = RecordWorker(duration_s=4.0)
+        welcome: _WelcomePage = self.wizard().page(0)  # type: ignore[assignment]
+        device = welcome.selected_device() if self.wizard() else None
+        self._worker = RecordWorker(duration_s=4.0, device=device)
         self._worker.finished.connect(self._on_recorded)
         self._worker.start()
 
