@@ -1,20 +1,37 @@
 
 Issue 1:
-When settings ui is opened and model changed from small to medium and save and close the window button doesnt work and gets stuck
-
-Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
-2026-07-08T21:13:57 myna.settings_ui.window      INFO     Settings saved to /home/xlr8/.config/myna/config.yaml
-2026-07-08T21:14:22 dbus.proxies                 ERROR    Introspect error on :1.695:/com/canonical/Myna: dbus.exceptions.DBusException: org.freedesktop.DBus.Error.NoReply: Did not receive a reply. Possible causes include: the remote application did not send a reply, the message bus security policy blocked the reply, the reply timeout expired, or the network connection was broken.
-2026-07-08T21:14:47 myna.config.settings         INFO     Config loaded from /home/xlr8/.config/myna/config.yaml
-2026-07-08T21:14:47 __main__                     INFO     Settings reloaded via DBus
-2026-07-08T21:14:47 myna.orchestrator.dictation_service WARNING  Recv loop error: received 1011 (internal error) keepalive ping timeout; then sent 1011 (internal error) keepalive ping timeout
+python3.12 -m myna.main
+2026-07-11T15:44:32 __main__                     INFO     Myna starting (Phase 4)
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/xlr8/2CODE/myna-voice/myna/main.py", line 269, in <module>
+    main()
+  File "/home/xlr8/2CODE/myna-voice/myna/main.py", line 257, in main
+    loop.run_until_complete(main_async())
+  File "/home/xlr8/2CODE/myna-voice/.venv/lib/python3.12/site-packages/qasync/__init__.py", line 438, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "/home/xlr8/2CODE/myna-voice/myna/main.py", line 60, in main_async
+    await backend.load(
+          ^^^^^^^^^^^^^
+TypeError: FasterWhisperBackend.load() got an unexpected keyword argument 'beam_size'
 
 
 issue 2:
 After saving config selected does not get downloaded.It gets downloaded.Before we can close the window.
 
+Issue -0---------
 
+EnrollWorker error: Failed to load speaker model: cannot import name '_ccallback_c' from 'scipy._lib' (/usr/lib/python3/dist-packages/scipy/_lib/__init__.py)
 
+2nd -- allow for mic not detected or mictest to switch from SBC -xq to msbc bluetooth earbuds
+when enrolling voice 
+
+python3.12 -m myna.speaker.enroller
+/usr/lib/python3/dist-packages/scipy/__init__.py:146: UserWarning: A NumPy version >=1.17.3 and <1.25.0 is required for this version of SciPy (detected version 2.5.1
+  warnings.warn(f"A NumPy version >={np_minversion} and <{np_maxversion}"
+  
 
 Issue 2:
 Dictation gets better when switching from small model to medium model as shown below. How can I improve small model? So that it captures every word better.
