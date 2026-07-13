@@ -32,7 +32,7 @@ Press **Ctrl+Space** to start dictating.  Press again to stop → text appears a
 ## Configuration
 
 Config file: `~/.config/myna/config.yaml`
-Copy the example: `cp config.yaml.example ~/.config/myna/config.yaml`
+Copy the example: `cp config.yaml.example ~/.config/myna/config.yaml`int8
 
 ### Key settings
 

@@ -35,6 +35,7 @@ Bluetooth headset oneplus
 I need to select bluetooth 
 
 
+
 Issue 2:
 Dictation gets better when switching from small model to medium model as shown below. How can I improve small model? So that it captures every word better.
 Optimizations for best apple/google level dictations
@@ -138,3 +139,49 @@ Speaker threshold	0.75	0.65	0.70-0.72 matches no longer discarded
 What to expect with small model now — segments like "every word." (logprob≈-0.54 → exp=0.58) and "segments get rejected" (0.61) will pass. True hallucinations like "is hood." (logprob≈-1.35 → exp=0.26) still rejected correctly.
 
 Further accuracy gains if needed: switch to small.en (English-only model, better than multilingual small for English), or set language=en explicitly in config (already done).
+
+
+
+
+Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
+2026-07-12T18:34:26 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
+2026-07-12T18:34:26 myna.audio.capture           INFO     BT profile switched for capture: bluez_card.08_12_87_F2_F6_D2 → headset-head-unit-msbc
+2026-07-12T18:34:27 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device='bt:bluez_card.08_12_87_F2_F6_D2'
+2026-07-12T18:34:27 myna.audio.adapter           INFO     AudioAdapter opened
+2026-07-12T18:34:31 faster_whisper               INFO     Processing audio with duration 00:01.020
+2026-07-12T18:34:31 myna.audio.capture           INFO     Mic capture stopped
+2026-07-12T18:34:31 myna.audio.capture           INFO     BT profile restored: bluez_card.08_12_87_F2_F6_D2 → a2dp-sink-sbc_xq
+2026-07-12T18:34:31 myna.audio.adapter           INFO     AudioAdapter closed
+2026-07-12T18:34:32 myna.orchestrator.dictation_service INFO     Speaker verification failed (score=0.21) — discarded
+2026-07-12T18:34:35 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
+2026-07-12T18:34:35 myna.audio.capture           INFO     BT profile switched for capture: bluez_card.08_12_87_F2_F6_D2 → headset-head-unit-msbc
+2026-07-12T18:34:36 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device='bt:bluez_card.08_12_87_F2_F6_D2'
+2026-07-12T18:34:36 myna.audio.adapter           INFO     AudioAdapter opened
+2026-07-12T18:34:37 faster_whisper               INFO     Processing audio with duration 00:01.020
+2026-07-12T18:34:39 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.62: 'cryptography.'
+2026-07-12T18:34:41 myna.audio.capture           INFO     Mic capture stopped
+2026-07-12T18:34:41 myna.audio.capture           INFO     BT profile restored: bluez_card.08_12_87_F2_F6_D2 → a2dp-sink-sbc_xq
+2026-07-12T18:34:41 myna.audio.adapter           INFO     AudioAdapter closed
+2026-07-12T18:34:41 myna.orchestrator.dictation_service INFO     Speaker verification failed (score=0.12) — discarded
+2026-07-12T18:35:01 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
+2026-07-12T18:35:01 myna.audio.capture           INFO     BT profile switched for capture: bluez_card.08_12_87_F2_F6_D2 → headset-head-unit-msbc
+2026-07-12T18:35:02 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device='bt:bluez_card.08_12_87_F2_F6_D2'
+2026-07-12T18:35:02 myna.audio.adapter           INFO     AudioAdapter opened
+2026-07-12T18:35:03 faster_whisper               INFO     Processing audio with duration 00:00.690
+2026-07-12T18:35:05 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.69: 'Thank you.'
+2026-07-12T18:35:08 faster_whisper               INFO     Processing audio with duration 00:00.960
+2026-07-12T18:35:10 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.74: 'Cryptography.'
+2026-07-12T18:35:11 myna.audio.capture           INFO     Mic capture stopped
+2026-07-12T18:35:11 myna.audio.capture           INFO     BT profile restored: bluez_card.08_12_87_F2_F6_D2 → a2dp-sink-sbc_xq
+2026-07-12T18:35:11 myna.audio.adapter           INFO     AudioAdapter closed
+2026-07-12T18:35:12 myna.orchestrator.dictation_service INFO     Speaker verification failed (score=0.16) — discarded
+2026-07-12T18:35:37 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
+2026-07-12T18:35:37 myna.audio.capture           INFO     BT profile switched for capture: bluez_card.08_12_87_F2_F6_D2 → headset-head-unit-msbc
+2026-07-12T18:35:38 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device='bt:bluez_card.08_12_87_F2_F6_D2'
+2026-07-12T18:35:38 myna.audio.adapter           INFO     AudioAdapter opened
+2026-07-12T18:35:40 faster_whisper               INFO     Processing audio with duration 00:02.100
+2026-07-12T18:35:43 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.76: 'type in the text cryptography.'
+2026-07-12T18:35:47 myna.audio.capture           INFO     Mic capture stopped
+2026-07-12T18:35:47 myna.audio.capture           INFO     BT profile restored: bluez_card.08_12_87_F2_F6_D2 → a2dp-sink-sbc_xq
+2026-07-12T18:35:47 myna.audio.adapter           INFO     AudioAdapter closed
+2026-07-12T18:35:48 myna.orchestrator.dictation_service INFO     Speaker verification failed (score=0.44) — discarded
