@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
 import numpy as np
@@ -17,6 +18,7 @@ from myna.config.settings import Settings
 from myna.injection.base import TextOutputBackend
 from myna.injection.xdotool import _get_focused_window
 from myna.orchestrator.session import DictationSession, SessionState
+from myna.orchestrator.vocab import PersonalVocab
 from myna.postprocessing.pipeline import PostProcessingPipeline
 from myna.utils.exceptions import MynaSessionError
 
@@ -65,6 +67,10 @@ class DictationService:
         self._recv_task: asyncio.Task[None] | None = None
         self._pending: list[TranscriptSegment] = []
         self._audio_buf: list[np.ndarray] = []
+        self._vocab: PersonalVocab | None = None
+        if settings.learning.vocab_enabled:
+            self._vocab = PersonalVocab(Path(settings.learning.vocab_path).expanduser())
+            self._client.set_hotwords(self._vocab.hotwords())
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -149,6 +155,10 @@ class DictationService:
                     await self._injector.start_session(self._session.target_window_id)
                     await self._injector.commit_text(text)
                     await self._injector.end_session()
+                    if self._vocab is not None:
+                        self._vocab.update(text)
+            if self._vocab is not None:
+                self._client.set_hotwords(self._vocab.hotwords())
 
         self._pending.clear()
         self._audio_buf.clear()
@@ -222,6 +232,14 @@ class DictationService:
         if not is_me:
             _LOG.info("Speaker verification failed (score=%.2f) — discarded", score)
             await _notify(self._settings, "⚠️ Speaker not recognised — text discarded")
+        elif (
+            self._settings.learning.adapt_voiceprint
+            and score < 1.0  # 1.0 = passthrough, nothing to learn from
+            and score >= self._settings.speaker.threshold + 0.05
+        ):
+            # Confident match → nudge voiceprint toward current voice/headset.
+            # Margin guard keeps borderline (possibly impostor) audio out.
+            await loop.run_in_executor(None, self._verifier.adapt, audio)
         return is_me
 
     def _fire_state(self) -> None:

@@ -5,6 +5,7 @@ Split from enroller.py to keep module size manageable.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -14,10 +15,12 @@ import sounddevice as sd
 import torch
 from PyQt6.QtCore import QThread, pyqtSignal
 
+from myna.audio.capture import _restore_default_source, _set_bt_default_source
+
 _LOG = logging.getLogger(__name__)
 
 _SAMPLE_RATE = 16_000
-_RECORD_SECONDS = 8
+_RECORD_SECONDS = 12
 
 
 def _get_active_profile(card: str) -> str | None:
@@ -87,6 +90,7 @@ class RecordWorker(QThread):
             sd_device: int | str | None
             _restore_card: str | None = None
             _restore_profile: str | None = None
+            _prev_default: str | None = None
 
             if isinstance(self._device, str) and self._device.startswith("bt:"):
                 # BT card in A2DP — switch to HFP/mSBC profile to enable mic
@@ -107,7 +111,11 @@ class RecordWorker(QThread):
                         continue
                 if not switched:
                     _LOG.warning("Could not switch BT profile for %s", card)
-                time.sleep(0.8)  # wait for PipeWire to create the input source
+                # Pin the recording to the BT mic — "pulse" records the
+                # default source, which may be a silent loopback otherwise.
+                _src, _prev_default = _set_bt_default_source(card)
+                if _src:
+                    os.environ["PULSE_SOURCE"] = _src
                 sd_device = "pulse"
 
             elif isinstance(self._device, str) and self._device.startswith("pa:"):
@@ -134,7 +142,9 @@ class RecordWorker(QThread):
         finally:
             # Restore A2DP/SBC-XQ after BT mic recording
             if _restore_card and _restore_profile:
+                os.environ.pop("PULSE_SOURCE", None)
                 _restore_bt_profile(_restore_card, _restore_profile)
+                _restore_default_source(_prev_default)
 
 
 class EnrollWorker(QThread):
@@ -162,11 +172,18 @@ class EnrollWorker(QThread):
 
     def run(self) -> None:
         try:
+            from myna.audio.denoiser import DenoiseFilter  # noqa: PLC0415
+            from myna.config.settings import load_settings  # noqa: PLC0415
             from myna.speaker.verifier import SpeakerVerifier  # noqa: PLC0415
 
+            # Verification at dictation time runs on denoised audio (see
+            # AudioAdapter); enroll through the same filter or the channel
+            # mismatch tanks the cosine scores.
+            audio_cfg = load_settings().audio
+            denoiser = DenoiseFilter(audio_cfg.denoise, audio_cfg.sample_rate)
             v: SpeakerVerifier = self._verifier  # type: ignore[assignment]
             v.load_model()  # no-op if already loaded; loads model without needing a voiceprint
-            embeddings = [v.get_embedding(r) for r in self._recordings]
+            embeddings = [v.get_embedding(denoiser.apply(r)) for r in self._recordings]
             mean_emb = np.mean(embeddings, axis=0).astype(np.float32)
             norm = np.linalg.norm(mean_emb)
             if norm > 0:

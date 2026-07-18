@@ -138,6 +138,7 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
     """Accumulate per-speech-turn audio, transcribe, reply with segments."""
     buffer: list[np.ndarray] = []
     language = "en"
+    hotwords: str | None = None
 
     while True:
         raw = await ws.receive_text()
@@ -154,12 +155,13 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
             audio = np.frombuffer(pcm_bytes, dtype=np.float32)
 
         language = msg.get("language", language)
+        hotwords = msg.get("hotwords", hotwords)
         buffer.append(audio)
 
         if msg.get("is_end_of_speech") and buffer:
             combined = np.concatenate(buffer)
             buffer.clear()
-            for seg in await _transcribe(backend, combined, language):
+            for seg in await _transcribe(backend, combined, language, hotwords):
                 await ws.send_text(
                     json.dumps(
                         {
@@ -175,7 +177,7 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
 
 
 async def _transcribe(
-    backend: InferenceBackend, audio: np.ndarray, language: str
+    backend: InferenceBackend, audio: np.ndarray, language: str, hotwords: str | None = None
 ) -> list[TranscriptSegment]:
     """Run backend.transcribe_stream on a single audio array."""
 
@@ -183,6 +185,6 @@ async def _transcribe(
         yield audio
 
     results: list[TranscriptSegment] = []
-    async for seg in backend.transcribe_stream(_one(), language):  # type: ignore[arg-type]
+    async for seg in backend.transcribe_stream(_one(), language, hotwords):  # type: ignore[arg-type]
         results.append(seg)
     return results

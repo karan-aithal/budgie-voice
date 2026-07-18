@@ -134,3 +134,27 @@ class SpeakerVerifier:
         except Exception as exc:
             _LOG.warning("Speaker verification error: %s — passthrough", exc)
             return True, 1.0
+
+    def adapt(self, audio: np.ndarray, alpha: float = 0.1) -> None:
+        """Nudge the stored voiceprint toward *audio* and persist it.
+
+        Call only after *audio* verified with a comfortable margin —
+        adapting on borderline scores lets an impostor drift the print.
+
+        Args:
+            audio: 1-D float32 array at 16 kHz that passed verification.
+            alpha: EMA weight of the new embedding (0.1 ≈ ~10-session memory).
+        """
+        if self._voiceprint is None:
+            return
+        try:
+            emb = self.get_embedding(audio)
+            vp = (1.0 - alpha) * self._voiceprint + alpha * emb
+            norm = np.linalg.norm(vp)
+            if norm > 0:
+                vp /= norm
+            self._voiceprint = vp.astype(np.float32)
+            torch.save(torch.tensor(self._voiceprint), self._voiceprint_path)
+            _LOG.info("Voiceprint adapted and saved")
+        except Exception as exc:
+            _LOG.warning("Voiceprint adaptation failed: %s", exc)

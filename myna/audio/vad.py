@@ -41,12 +41,19 @@ class VADFilter:
     # ------------------------------------------------------------------
 
     def load(self) -> None:
-        """Download / load Silero VAD via torch.hub. Call once at startup."""
+        """Download / load Silero VAD via torch.hub. No-op if already loaded."""
+        self.max_score = 0.0  # highest speech score this session (diagnostics)
+        if self._model is not None:
+            # Model persists across sessions — just reset streaming state.
+            self._in_speech = False
+            self._pad_remaining = 0
+            return
         model, _ = torch.hub.load(
             "snakers4/silero-vad",
             "silero_vad",
             force_reload=False,
             verbose=False,
+            trust_repo=True,  # non-interactive: never prompt on stdin mid-session
         )
         self._model = model
         _LOG.info("Silero VAD loaded (threshold=%.2f, pad=%d ms)", self._threshold, int(self._pad_samples / self._sample_rate * 1000))
@@ -70,6 +77,7 @@ class VADFilter:
             tensor = torch.from_numpy(window.astype(np.float32))
             with torch.no_grad():
                 score = float(self._model(tensor, self._sample_rate).item())  # type: ignore[operator]
+            self.max_score = max(getattr(self, "max_score", 0.0), score)
             if score >= self._threshold:
                 return True
         return False

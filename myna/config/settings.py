@@ -54,7 +54,7 @@ class InferenceSettings:
     compute_type: str = "int8"
     language: str = "en"
     confidence_threshold: float = 0.40
-    beam_size: int = 5
+    beam_size: int = 3
 
 
 @dataclass
@@ -65,6 +65,16 @@ class SpeakerSettings:
     voiceprint_path: str = "~/.config/myna/voiceprint.pt"
     threshold: float = 0.65
     min_samples: int = 5
+
+
+@dataclass
+class LearningSettings:
+    """On-device adaptation. Both stores hold derived data only — never audio
+    or transcripts: voiceprint = one embedding vector, vocab = word counts."""
+
+    adapt_voiceprint: bool = True
+    vocab_enabled: bool = True
+    vocab_path: str = "~/.config/myna/vocab.json"
 
 
 @dataclass
@@ -141,6 +151,7 @@ class Settings:
     vad: VadSettings = field(default_factory=VadSettings)
     inference: InferenceSettings = field(default_factory=InferenceSettings)
     speaker: SpeakerSettings = field(default_factory=SpeakerSettings)
+    learning: LearningSettings = field(default_factory=LearningSettings)
     postprocessing: PostprocessingSettings = field(default_factory=PostprocessingSettings)
     injection: InjectionSettings = field(default_factory=InjectionSettings)
     dbus: DbusSettings = field(default_factory=DbusSettings)

@@ -22,6 +22,20 @@ if TYPE_CHECKING:
 
 _LOG = logging.getLogger(__name__)
 
+# X11/Linux reports left/right modifier variants — collapse to the generic
+# Key used by _KEY_MAP so held-combo matching works.
+_MODIFIER_ALIASES: dict[pynput.keyboard.Key, pynput.keyboard.Key] = {
+    pynput.keyboard.Key.ctrl_l: pynput.keyboard.Key.ctrl,
+    pynput.keyboard.Key.ctrl_r: pynput.keyboard.Key.ctrl,
+    pynput.keyboard.Key.alt_l: pynput.keyboard.Key.alt,
+    pynput.keyboard.Key.alt_r: pynput.keyboard.Key.alt,
+    pynput.keyboard.Key.alt_gr: pynput.keyboard.Key.alt,
+    pynput.keyboard.Key.shift_l: pynput.keyboard.Key.shift,
+    pynput.keyboard.Key.shift_r: pynput.keyboard.Key.shift,
+    pynput.keyboard.Key.cmd_l: pynput.keyboard.Key.cmd,
+    pynput.keyboard.Key.cmd_r: pynput.keyboard.Key.cmd,
+}
+
 # pynput Key names that map to special Key enum values
 _KEY_MAP: dict[str, pynput.keyboard.Key] = {
     "ctrl":  pynput.keyboard.Key.ctrl,
@@ -134,10 +148,10 @@ class HotkeyManager:
     def _normalise(
         key: pynput.keyboard.Key | pynput.keyboard.KeyCode,
     ) -> pynput.keyboard.Key | pynput.keyboard.KeyCode:
-        """Normalise left/right modifier variants to canonical form."""
-        try:
-            # e.g. Key.ctrl_l → Key.ctrl
-            canonical = key.vk  # type: ignore[union-attr]
-        except AttributeError:
-            pass
-        return key
+        """Normalise left/right modifier variants to canonical form.
+
+        Linux/X11 reports ``ctrl_l``/``ctrl_r`` etc., never the generic
+        ``Key.ctrl`` that ``_KEY_MAP`` uses — without this mapping the
+        hotkey's ``issubset`` check can never match.
+        """
+        return _MODIFIER_ALIASES.get(key, key)

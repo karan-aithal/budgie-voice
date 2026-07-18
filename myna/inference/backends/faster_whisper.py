@@ -60,6 +60,7 @@ class FasterWhisperBackend(InferenceBackend):
         self,
         audio_frames: AsyncIterator[np.ndarray],
         language: str,
+        hotwords: str | None = None,
     ) -> AsyncIterator[TranscriptSegment]:
         """Accumulate audio frames then transcribe as one batch.
 
@@ -85,7 +86,7 @@ class FasterWhisperBackend(InferenceBackend):
 
         audio = np.concatenate(buffer).astype(np.float32)
         loop = asyncio.get_running_loop()
-        segments = await loop.run_in_executor(None, self._transcribe_sync, audio, language)
+        segments = await loop.run_in_executor(None, self._transcribe_sync, audio, language, hotwords)
 
         for seg in segments:
             yield seg
@@ -138,10 +139,13 @@ class FasterWhisperBackend(InferenceBackend):
         except Exception as exc:
             raise MynaInferenceError(f"Failed to load WhisperModel '{model}': {exc}") from exc
 
-    def _transcribe_sync(self, audio: np.ndarray, language: str) -> list[TranscriptSegment]:
+    def _transcribe_sync(
+        self, audio: np.ndarray, language: str, hotwords: str | None = None
+    ) -> list[TranscriptSegment]:
         segments_iter, info = self._model.transcribe(  # type: ignore[union-attr]
             audio,
             language=language,
+            hotwords=hotwords,
             beam_size=self._beam_size,
             without_timestamps=True,
             condition_on_previous_text=False,

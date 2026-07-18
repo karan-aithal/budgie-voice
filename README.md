@@ -27,6 +27,7 @@ bash scripts/install_service.sh
 
 Press **Ctrl+Space** to start dictating.  Press again to stop → text appears at cursor.
 
+   
 ---
 
 ## Configuration

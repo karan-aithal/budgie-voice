@@ -33,6 +33,11 @@ class InferenceClient:
         self._ws_url = f"ws://{host}:{port}/ws/transcribe"
         self._ws: object | None = None
         self._language: str = "en"
+        self._hotwords: str | None = None
+
+    def set_hotwords(self, hotwords: str | None) -> None:
+        """Set personal-vocabulary hotwords sent with each frame."""
+        self._hotwords = hotwords
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -87,6 +92,7 @@ class InferenceClient:
             "frame_id": frame.frame_id,
             "is_end_of_speech": frame.is_end_of_speech,
             "language": self._language,
+            "hotwords": self._hotwords,
         }
         await self._ws.send(json.dumps(msg))  # type: ignore[union-attr]
 

@@ -9,7 +9,7 @@ import numpy as np
 
 from myna.inference.protocol import TranscriptSegment
 
-INTERFACE_VERSION = "1.0"
+INTERFACE_VERSION = "1.1"
 
 
 @dataclass
@@ -55,6 +55,7 @@ class InferenceBackend(ABC):
         self,
         audio_frames: AsyncIterator[np.ndarray],
         language: str,
+        hotwords: str | None = None,
     ) -> AsyncIterator[TranscriptSegment]:
         """Transcribe an async stream of float32 audio frames.
 
@@ -63,6 +64,9 @@ class InferenceBackend(ABC):
         Args:
             audio_frames: Async iterator of 1-D float32 numpy arrays at 16 kHz.
             language: BCP-47 target language hint.
+            hotwords: Optional space-joined words to bias decoding toward
+                (user's personal vocabulary). Added in interface 1.1;
+                backends may ignore it.
 
         Yields:
             :class:`~myna.inference.protocol.TranscriptSegment` in order.

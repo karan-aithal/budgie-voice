@@ -144,7 +144,7 @@ class SettingsWindow(QDialog):
         fl = QFormLayout(box)
 
         self._model_combo = QComboBox()
-        self._model_combo.addItems(["tiny", "small", "medium", "large-v3"])
+        self._model_combo.addItems(["tiny", "tiny.en", "small", "small.en", "medium", "medium.en", "large-v3"])
         self._model_combo.setCurrentText(self._settings.inference.model)
         fl.addRow("Model:", self._model_combo)
 

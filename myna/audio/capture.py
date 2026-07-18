@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import subprocess
 import time
 from typing import TYPE_CHECKING
@@ -38,6 +39,60 @@ def _get_active_profile(card: str) -> str | None:
     except Exception:
         pass
     return None
+
+
+def _set_bt_default_source(card: str) -> tuple[str | None, str | None]:
+    """Find the BT card's HFP mic source, make it the default, and pin it.
+
+    Returns ``(source_name, previous_default)``. The caller should also export
+    ``PULSE_SOURCE=source_name`` before opening the stream — device="pulse"
+    otherwise follows the default source, which can point elsewhere (e.g. an
+    snd_aloop loopback → pure silence) or be re-routed mid-session. Polls
+    because PipeWire creates the bluez_input source asynchronously after the
+    profile switch.
+    """
+    mac = card.removeprefix("bluez_card.")
+    prev: str | None = None
+    try:
+        prev = subprocess.check_output(
+            ["pactl", "get-default-source"], timeout=5, text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+    except Exception:
+        pass
+
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        try:
+            out = subprocess.check_output(
+                ["pactl", "list", "short", "sources"], timeout=5, text=True,
+                stderr=subprocess.DEVNULL,
+            )
+            for line in out.splitlines():
+                parts = line.split("\t")
+                if len(parts) >= 2 and parts[1].startswith("bluez_input.") and mac in parts[1]:
+                    subprocess.run(
+                        ["pactl", "set-default-source", parts[1]],
+                        check=True, timeout=5, capture_output=True,
+                    )
+                    _LOG.info("BT mic source selected: %s", parts[1])
+                    return parts[1], prev
+        except Exception:
+            pass
+        time.sleep(0.2)
+
+    _LOG.warning("BT mic source never appeared for %s — recording from default source %r", card, prev)
+    return None, prev
+
+
+def _restore_default_source(prev: str | None) -> None:
+    if not prev:
+        return
+    try:
+        subprocess.run(
+            ["pactl", "set-default-source", prev], check=True, timeout=5, capture_output=True,
+        )
+    except Exception:
+        _LOG.debug("Could not restore default source %r", prev)
 
 
 def _restore_bt_profile(card: str, original: str | None) -> None:
@@ -75,6 +130,7 @@ class AudioCapture:
         self._chunk_frames = int(settings.sample_rate * settings.chunk_duration_ms / 1000)
         self._bt_card: str | None = None       # set when BT profile was switched
         self._bt_restore_profile: str | None = None
+        self._prev_default_source: str | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -103,7 +159,9 @@ class AudioCapture:
                     break
                 except subprocess.CalledProcessError:
                     continue
-            time.sleep(0.8)
+            src, self._prev_default_source = _set_bt_default_source(card)
+            if src:
+                os.environ["PULSE_SOURCE"] = src  # pin our stream to the BT mic
             sd_device = "pulse"
         elif isinstance(device_cfg, str) and device_cfg.startswith("pa:"):
             source = device_cfg[3:]
@@ -145,9 +203,12 @@ class AudioCapture:
             self._stream = None
             _LOG.info("Mic capture stopped")
         if self._bt_card:
+            os.environ.pop("PULSE_SOURCE", None)
             _restore_bt_profile(self._bt_card, self._bt_restore_profile)
+            _restore_default_source(self._prev_default_source)
             self._bt_card = None
             self._bt_restore_profile = None
+            self._prev_default_source = None
 
     @property
     def queue(self) -> asyncio.Queue[np.ndarray]:

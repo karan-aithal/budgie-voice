@@ -41,6 +41,10 @@ class AudioAdapter:
         self._audio_settings = audio_settings
         self._capture = AudioCapture(audio_settings, loop)
         self._denoiser = DenoiseFilter(audio_settings.denoise, audio_settings.sample_rate)
+        self._peak = 0.0
+        self._chunks = 0
+        self._forwarded = 0
+        self._end_events = 0
         self._vad: VADFilter | None = (
             VADFilter(
                 aggressiveness=vad_settings.aggressiveness,
@@ -59,12 +63,21 @@ class AudioAdapter:
         """Load VAD model and start microphone capture."""
         if self._vad is not None:
             self._vad.load()
+        self._peak = 0.0
+        self._chunks = 0
+        self._forwarded = 0
+        self._end_events = 0
         self._capture.start()
         _LOG.info("AudioAdapter opened")
 
     def close(self) -> None:
         """Stop microphone and release all resources."""
         self._capture.stop()
+        vad_max = getattr(self._vad, "max_score", 0.0) if self._vad else -1.0
+        _LOG.info(
+            "Session audio stats: peak=%.3f chunks=%d forwarded=%d end_events=%d vad_max_score=%.2f",
+            self._peak, self._chunks, self._forwarded, self._end_events, vad_max,
+        )
         _LOG.info("AudioAdapter closed")
 
     # ------------------------------------------------------------------
@@ -89,6 +102,8 @@ class AudioAdapter:
                 else chunk.astype(np.float32)
             )
             denoised = self._denoiser.apply(f32)
+            self._chunks += 1
+            self._peak = max(self._peak, float(np.abs(denoised).max()))
 
             if self._vad is None:
                 yield self._to_frame(denoised, is_end_of_speech=False)
@@ -96,6 +111,9 @@ class AudioAdapter:
 
             output, is_end = self._vad.process(denoised)
             if output is not None:
+                self._forwarded += 1
+                if is_end:
+                    self._end_events += 1
                 yield self._to_frame(output, is_end_of_speech=is_end)
 
     # ------------------------------------------------------------------

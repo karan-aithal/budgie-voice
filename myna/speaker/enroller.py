@@ -36,12 +36,12 @@ from PyQt6.QtWidgets import (
     QWizardPage,
 )
 
-from myna.speaker._workers import EnrollWorker, RecordWorker
+from myna.speaker._workers import _RECORD_SECONDS, EnrollWorker, RecordWorker
 from myna.speaker.verifier import SpeakerVerifier
 
 _LOG = logging.getLogger(__name__)
 
-_N_CLIPS = 10
+_N_CLIPS = 15
 _SAMPLE_RATE = 16_000
 _VOICEPRINT_PATH = Path.home() / ".config" / "myna" / "voiceprint.pt"
 
@@ -159,7 +159,10 @@ class _RecordingPage(QWizardPage):
     def __init__(self) -> None:
         super().__init__()
         self.setTitle("Record Your Voice")
-        self.setSubTitle(f"Record {_N_CLIPS} clips. Speak naturally for 5 seconds each.")
+        self.setSubTitle(
+            f"Record {_N_CLIPS} clips of {_RECORD_SECONDS} s each. Speak naturally — "
+            "vary your pace and content: read a sentence, speak freely, dictate numbers."
+        )
 
         self._clips: list[np.ndarray] = []
         self._worker: RecordWorker | None = None
@@ -188,7 +191,7 @@ class _RecordingPage(QWizardPage):
         self._status.setText("🔴 Recording… speak now!")
         welcome: _WelcomePage = self.wizard().page(0)  # type: ignore[assignment]
         device = welcome.selected_device() if self.wizard() else None
-        self._worker = RecordWorker(duration_s=8.0, device=device)  # type: ignore[arg-type]
+        self._worker = RecordWorker(device=device)  # type: ignore[arg-type]
         self._worker.finished.connect(self._on_recorded)
         self._worker.error.connect(self._on_error)
         self._worker.start()
