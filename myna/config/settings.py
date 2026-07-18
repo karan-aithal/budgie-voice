@@ -55,6 +55,11 @@ class InferenceSettings:
     language: str = "en"
     confidence_threshold: float = 0.40
     beam_size: int = 3
+    # Hallucination guards (faster-whisper decode-time): reject segments that
+    # look like silence-babble rather than real speech.
+    no_speech_threshold: float = 0.6
+    log_prob_threshold: float = -1.0
+    compression_ratio_threshold: float = 2.4
 
 
 @dataclass

@@ -9,7 +9,7 @@ import numpy as np
 
 from myna.inference.protocol import TranscriptSegment
 
-INTERFACE_VERSION = "1.1"
+INTERFACE_VERSION = "1.2"
 
 
 @dataclass
@@ -40,7 +40,16 @@ class InferenceBackend(ABC):
     interface_version: str = INTERFACE_VERSION
 
     @abstractmethod
-    async def load(self, model: str, device: str, compute_type: str, beam_size: int = 5) -> None:
+    async def load(
+        self,
+        model: str,
+        device: str,
+        compute_type: str,
+        beam_size: int = 5,
+        no_speech_threshold: float = 0.6,
+        log_prob_threshold: float = -1.0,
+        compression_ratio_threshold: float = 2.4,
+    ) -> None:
         """Load or initialise the model.
 
         Args:
@@ -48,6 +57,13 @@ class InferenceBackend(ABC):
             device: Target device — ``"auto"``, ``"cpu"``, or ``"cuda"``.
             compute_type: Quantisation type (e.g. ``"int8"``).
             beam_size: Beam width for decoding (higher = more accurate, slower).
+            no_speech_threshold: Silence-probability above which a segment is
+                dropped as non-speech (hallucination guard). Added in
+                interface 1.2; backends may ignore it.
+            log_prob_threshold: Average log-probability below which a decode
+                is considered low-confidence gibberish and dropped.
+            compression_ratio_threshold: Gzip compression ratio above which a
+                segment is considered repetitive/hallucinated text.
         """
 
     @abstractmethod

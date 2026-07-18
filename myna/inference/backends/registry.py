@@ -6,10 +6,11 @@ from __future__ import annotations
 
 from myna.inference.backends.base import InferenceBackend
 from myna.inference.backends.faster_whisper import FasterWhisperBackend
+from myna.inference.backends.parakeet import ParakeetBackend
 
 _REGISTRY: dict[str, type[InferenceBackend]] = {
     "faster_whisper": FasterWhisperBackend,
-    # "parakeet":     ParakeetBackend,    # future
+    "parakeet": ParakeetBackend,
     # "nemotron":     NemotronBackend,    # future
     # "qwen3_asr":    Qwen3AsrBackend,    # future
 }

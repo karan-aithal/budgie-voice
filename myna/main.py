@@ -62,6 +62,9 @@ async def main_async() -> None:
         settings.inference.device,
         settings.inference.compute_type,
         beam_size=settings.inference.beam_size,
+        no_speech_threshold=settings.inference.no_speech_threshold,
+        log_prob_threshold=settings.inference.log_prob_threshold,
+        compression_ratio_threshold=settings.inference.compression_ratio_threshold,
     )
 
     server = InferenceServer(backend, port=settings.inference.server_port)
@@ -107,6 +110,7 @@ async def main_async() -> None:
     # ------------------------------------------------------------------
     _state_cbs: list[Callable[[SessionState], None]] = []
     _low_conf_cbs: list[Callable[[], None]] = []
+    _level_cbs: list[Callable[[float], None]] = []
 
     def _on_state(state: SessionState) -> None:
         for cb in _state_cbs:
@@ -116,6 +120,10 @@ async def main_async() -> None:
         for cb in _low_conf_cbs:
             cb()
 
+    def _on_level(level: float) -> None:
+        for cb in _level_cbs:
+            cb(level)
+
     # ------------------------------------------------------------------
     # DictationService
     # ------------------------------------------------------------------
@@ -123,6 +131,7 @@ async def main_async() -> None:
         adapter=adapter, client=client, pipeline=pipeline,
         injector=injector, verifier=verifier, settings=settings,
         on_state_change=_on_state, on_low_confidence=_on_low_conf,
+        on_audio_level=_on_level,
     )
 
     # ------------------------------------------------------------------
@@ -154,6 +163,9 @@ async def main_async() -> None:
                     new_inf.device,
                     new_inf.compute_type,
                     beam_size=new_inf.beam_size,
+                    no_speech_threshold=new_inf.no_speech_threshold,
+                    log_prob_threshold=new_inf.log_prob_threshold,
+                    compression_ratio_threshold=new_inf.compression_ratio_threshold,
                 ),
                 loop,
             )
@@ -170,6 +182,7 @@ async def main_async() -> None:
     stop_event = asyncio.Event()
 
     try:
+        from myna.indicator.recorder_widget import FloatingRecorderWidget  # noqa: PLC0415
         from myna.indicator.tray import TrayIcon, TrayState  # noqa: PLC0415
         from myna.settings_ui.window import SettingsWindow  # noqa: PLC0415
         from myna.speaker.enroller import EnrollmentWizard  # noqa: PLC0415
@@ -184,10 +197,25 @@ async def main_async() -> None:
         )
         tray.show()
 
+        def _on_cancel_clicked() -> None:
+            asyncio.run_coroutine_threadsafe(dict_svc.cancel(), loop)
+
+        recorder_widget = FloatingRecorderWidget(on_cancel=_on_cancel_clicked)
+
+        def _update_recorder_widget(state: SessionState) -> None:
+            if state == SessionState.RECORDING:
+                recorder_widget.show_recording()
+            elif state == SessionState.TRANSCRIBING or state == SessionState.FINALIZING:
+                recorder_widget.show_transcribing()
+            else:
+                recorder_widget.hide_widget()
+
         _state_cbs.append(
             lambda s: tray.set_state(TrayState(_SESSION_TO_TRAY.get(s, "idle")))
         )
+        _state_cbs.append(_update_recorder_widget)
         _low_conf_cbs.append(lambda: tray.set_state(TrayState.LOW_CONFIDENCE))
+        _level_cbs.append(recorder_widget.push_level)
         _LOG.info("System tray active")
     except Exception as exc:
         _LOG.info("Tray unavailable (%s) — headless mode", exc)

@@ -21,3 +21,7 @@ Per-noise-condition VAD/gain profiles — save separate vad.aggressiveness/gain 
 N-best rescoring with personal vocab — currently hotwords bias faster-whisper's own decode; could go further and rerank whisper's alternate hypotheses against your vocab frequency table post-hoc. More accuracy, real effort, own decode loop needed.
 Enrollment top-up prompts — after N sessions with strong scores, prompt "add these to voiceprint?" using highest-confidence session audio instead of passive EMA only. Cheap addition on top of what exists.
 
+can you type what i am saying clearlycan you check if this new feature helps me
+can you check if both parts have been verifiedor can you tell me if additional feature helps meif you sometimes lean back or turn your head while dictatingwith reduced beam size this transcription happened 1stor lost
+
+

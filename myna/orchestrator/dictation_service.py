@@ -53,6 +53,7 @@ class DictationService:
         settings: Settings,
         on_state_change: Callable[[SessionState], None] | None = None,
         on_low_confidence: Callable[[], None] | None = None,
+        on_audio_level: Callable[[float], None] | None = None,
     ) -> None:
         self._adapter = adapter
         self._client = client
@@ -62,6 +63,7 @@ class DictationService:
         self._settings = settings
         self._on_state_change = on_state_change
         self._on_low_confidence = on_low_confidence
+        self._on_audio_level = on_audio_level
         self._session = DictationSession()
         self._send_task: asyncio.Task[None] | None = None
         self._recv_task: asyncio.Task[None] | None = None
@@ -108,6 +110,11 @@ class DictationService:
         """Push-to-hold: end session."""
         if self._session.is_active:
             await self._stop_session()
+
+    async def cancel(self) -> None:
+        """Abort the active session without injecting anything (e.g. floating-widget Cancel button)."""
+        if self._session.is_active:
+            await self._cancel_session()
 
     @property
     def state(self) -> SessionState:
@@ -185,9 +192,11 @@ class DictationService:
     async def _send_loop(self) -> None:
         try:
             async for frame in self._adapter.stream():
+                pcm = np.frombuffer(frame.data, dtype=np.int16)
                 if self._settings.speaker.enabled:
-                    pcm = np.frombuffer(frame.data, dtype=np.int16)
                     self._audio_buf.append(pcm.astype(np.float32) / 32_767.0)
+                if self._on_audio_level is not None and len(pcm):
+                    self._on_audio_level(float(np.abs(pcm).max()) / 32_767.0)
                 await self._client.send_frame(frame)
         except asyncio.CancelledError:
             pass

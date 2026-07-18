@@ -10,11 +10,17 @@
 
 # ── STT inference ─────────────────────────────────────────────────────────────
 faster-whisper>=1.0.0
+onnx-asr>=0.12.0          # Parakeet-TDT backend (CPU, ~3.6x lower latency than
+                           # faster-whisper on short dictation-length utterances,
+                           # no hallucination on silence — benchmarked on this
+                           # project's hardware; batch-decode only, no partials)
 
 # ── Inference server ──────────────────────────────────────────────────────────
 fastapi>=0.110.0
 uvicorn>=0.29.0
 websockets>=12.0
+python-multipart>=0.0.9   # required by FastAPI File()/Form() uploads
+soundfile>=0.12.1         # /v1/audio/transcriptions in-memory file decode
 
 # ── Audio capture ─────────────────────────────────────────────────────────────
 sounddevice>=0.4.6

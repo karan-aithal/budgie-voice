@@ -33,12 +33,24 @@ class FasterWhisperBackend(InferenceBackend):
         self._model_name: str = "small"
         self._language: str = "en"
         self._beam_size: int = 5
+        self._no_speech_threshold: float = 0.6
+        self._log_prob_threshold: float = -1.0
+        self._compression_ratio_threshold: float = 2.4
 
     # ------------------------------------------------------------------
     # InferenceBackend interface
     # ------------------------------------------------------------------
 
-    async def load(self, model: str, device: str, compute_type: str, beam_size: int = 5) -> None:
+    async def load(
+        self,
+        model: str,
+        device: str,
+        compute_type: str,
+        beam_size: int = 5,
+        no_speech_threshold: float = 0.6,
+        log_prob_threshold: float = -1.0,
+        compression_ratio_threshold: float = 2.4,
+    ) -> None:
         """Load WhisperModel in a thread-pool executor.
 
         Args:
@@ -52,6 +64,9 @@ class FasterWhisperBackend(InferenceBackend):
         """
         self._model_name = model
         self._beam_size = beam_size
+        self._no_speech_threshold = no_speech_threshold
+        self._log_prob_threshold = log_prob_threshold
+        self._compression_ratio_threshold = compression_ratio_threshold
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._load_sync, model, device, compute_type)
         _LOG.info("FasterWhisperBackend ready: %s on %s (%s)", model, device, compute_type)
@@ -149,6 +164,9 @@ class FasterWhisperBackend(InferenceBackend):
             beam_size=self._beam_size,
             without_timestamps=True,
             condition_on_previous_text=False,
+            no_speech_threshold=self._no_speech_threshold,
+            log_prob_threshold=self._log_prob_threshold,
+            compression_ratio_threshold=self._compression_ratio_threshold,
         )
         results: list[TranscriptSegment] = []
         for seg in segments_iter:

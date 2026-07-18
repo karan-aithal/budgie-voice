@@ -1,14 +1,11 @@
 
 Issue 1:
+4. Screen-context AI (reads screen content to adapt) — needs OCR/accessibility API integration, LLM call per dictation. Big scope, conflicts with your minimalist/local-only design.
+https://github.com/Beingpax/VoiceInk
+5. Smart Modes (AI rewrite styles) + conversational assistant mode — needs an LLM in the loop (your master prompt only lists "future: local LLM" for finalization, nothing conversational). Real feature, real scope, not a quick add.
 
-2026-07-11T17:36:37 myna.orchestrator.dictation_service INFO     Segment accepted conf=0.75: 'These two things are important.'
+Cheapest real win: #1 (manual dictionary). Say go and I build it.
 
-but 
-
-2026-07-11T17:36:40 myna.orchestrator.dictation_service INFO     Injecting: conf=0.75 'These 2'
-
-issue 2:
-After saving config selected does not get downloaded.It gets downloaded.Before we can close the window.
 
 Issue -0---------
 
@@ -17,14 +14,6 @@ EnrollWorker error: Failed to load speaker model: cannot import name '_ccallback
 2nd -- allow for mic not detected or mictest to switch from SBC -xq to msbc bluetooth earbuds
 when enrolling voice 
 
-Myna ready — ctrl+space (toggle).  Ctrl+C to exit.
-2026-07-11T16:19:34 myna.audio.vad               INFO     Silero VAD loaded (threshold=0.50, pad=300 ms)
-2026-07-11T16:19:34 myna.audio.capture           INFO     Mic capture started — 16000 Hz, 30 ms chunks, device=None
-2026-07-11T16:19:34 myna.audio.adapter           INFO     AudioAdapter opened
-/home/xlr8/2CODE/myna-voice/.venv/lib/python3.12/site-packages/noisereduce/spectralgate/nonstationary.py:70: RuntimeWarning: invalid value encountered in divide
-  sig_mult_above_thresh = (abs_sig_stft - sig_stft_smooth) / sig_stft_smooth
-2026-07-11T16:20:01 myna.audio.capture           INFO     Mic capture stopped
-2026-07-11T16:20:01 myna.audio.adapter           INFO     AudioAdapter closed
 
 4: USB Audio: - (hw:1,0)5: USB Audio: #1 (hw:1,1)8: Loopback: PCM (hw:2,0)9: Loopback: PCM (hw:2,1)- 11: pipewire12: pulse13: default
 only these are available for Microphone , but still , where i have 3 input -- 
