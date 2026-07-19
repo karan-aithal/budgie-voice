@@ -80,6 +80,8 @@ class LearningSettings:
     adapt_voiceprint: bool = True
     vocab_enabled: bool = True
     vocab_path: str = "~/.config/myna/vocab.json"
+    corrections_enabled: bool = True
+    corrections_path: str = "~/.config/myna/corrections.json"
 
 
 @dataclass
@@ -101,6 +103,7 @@ class InjectionSettings:
     delay_ms: int = 12
     clear_modifiers: bool = True
     block_secure_fields: bool = True
+    preview_before_inject: bool = True
 
 
 @dataclass

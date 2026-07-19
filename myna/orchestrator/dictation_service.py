@@ -9,7 +9,7 @@ import asyncio
 import logging
 import subprocess
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 import numpy as np
 
@@ -18,6 +18,7 @@ from myna.config.settings import Settings
 from myna.injection.base import TextOutputBackend
 from myna.injection.xdotool import _get_focused_window
 from myna.orchestrator.session import DictationSession, SessionState
+from myna.orchestrator.corrections import CorrectionMemory
 from myna.orchestrator.vocab import PersonalVocab
 from myna.postprocessing.pipeline import PostProcessingPipeline
 from myna.utils.exceptions import MynaSessionError
@@ -54,6 +55,7 @@ class DictationService:
         on_state_change: Callable[[SessionState], None] | None = None,
         on_low_confidence: Callable[[], None] | None = None,
         on_audio_level: Callable[[float], None] | None = None,
+        on_preview: Callable[[str], Awaitable[str | None]] | None = None,
     ) -> None:
         self._adapter = adapter
         self._client = client
@@ -64,6 +66,7 @@ class DictationService:
         self._on_state_change = on_state_change
         self._on_low_confidence = on_low_confidence
         self._on_audio_level = on_audio_level
+        self._on_preview = on_preview
         self._session = DictationSession()
         self._send_task: asyncio.Task[None] | None = None
         self._recv_task: asyncio.Task[None] | None = None
@@ -73,6 +76,9 @@ class DictationService:
         if settings.learning.vocab_enabled:
             self._vocab = PersonalVocab(Path(settings.learning.vocab_path).expanduser())
             self._client.set_hotwords(self._vocab.hotwords())
+        self._corrections: CorrectionMemory | None = None
+        if settings.learning.corrections_enabled:
+            self._corrections = CorrectionMemory(Path(settings.learning.corrections_path).expanduser())
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -155,15 +161,24 @@ class DictationService:
 
         inject_ok = await self._verify_speaker()
         if inject_ok:
-            for seg in self._pending:
-                text = self._pipeline.run(seg.text)
-                if text:
-                    _LOG.info("Injecting: conf=%.2f %r", seg.confidence, text[:80])
-                    await self._injector.start_session(self._session.target_window_id)
-                    await self._injector.commit_text(text)
-                    await self._injector.end_session()
-                    if self._vocab is not None:
-                        self._vocab.update(text)
+            texts = [self._pipeline.run(seg.text) for seg in self._pending]
+            heard = " ".join(t for t in texts if t)
+            if self._corrections is not None:
+                heard = self._corrections.apply(heard)  # auto-fix known mishears
+            combined = heard
+            if heard and self._on_preview is not None and self._settings.injection.preview_before_inject:
+                combined = await self._on_preview(heard)
+            if combined:
+                _LOG.info("Injecting: %r", combined[:80])
+                await self._injector.start_session(self._session.target_window_id)
+                await self._injector.commit_text(combined)
+                await self._injector.end_session()
+                # heard vs combined diff = the training signal: what ASR got
+                # wrong and what the user actually meant.
+                if self._corrections is not None and combined != heard:
+                    self._corrections.learn(heard, combined)
+                if self._vocab is not None:
+                    self._vocab.update(combined)
             if self._vocab is not None:
                 self._client.set_hotwords(self._vocab.hotwords())
 

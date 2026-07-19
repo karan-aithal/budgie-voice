@@ -7,6 +7,22 @@ https://github.com/Beingpax/VoiceInk
 Cheapest real win: #1 (manual dictionary). Say go and I build it.
 
 
+1. Floating recording indicator — VoiceInk shows a mini widget/overlay near where you're typing while recording (waveform, cancel button). You only have a static tray icon color change — easy to miss if tray isn't in view. Cheap-ish: small always-on-top PyQt widget, shown only during RECORDING/TRANSCRIBING states, positioned near cursor or corner.
+Increase waveform intensity 
+
+2. Preview-before-inject — VoiceInk shows "Preview" of the transcribed/enhanced text before it lands. You inject immediately on accept — no chance to catch a bad transcription before it's typed. Real UX gap given your hallucination/confidence concerns from earlier.
+3. Dictionary editor UI — ties to the "manual Personal Dictionary" backend gap flagged earlier; needs a settings tab/table (word/replacement pairs), not just YAML.
+4. Mode/App indicator ("Active Mode: Gmail") — pairs with the per-app-profile backend gap already flagged; the UI half is a simple label in tray tooltip or floating widget.
+Not present in your settings window, worth adding regardless of VoiceInk:
+5. Tabs instead of one long group-box column — settings window is flat GroupBoxes; fine now, will get cluttered once dictionary/modes UI lands. Cheap: QTabWidget wrap.
+
+Inverse Text Normalization (ITN) — real gap. Myna's normalize_numbers in postprocessing pipeline is narrower than proper ITN (spoken→written form: dates, currency, units, abbreviations). Worth checking myna/postprocessing/pipeline.py scope.
+
+VAD tuned params (min speech/silence duration, per-chunk probability) — myna's Silero VAD has aggressiveness levels only. FluidAudio exposes finer min-duration knobs. Minor, skip unless VAD misfires again.
+
+Corruption detection + re-download for cached models — myna trusts local model cache blindly. Small robustness gap, low priority.
+
+
 Issue -0---------
 
 EnrollWorker error: Failed to load speaker model: cannot import name '_ccallback_c' from 'scipy._lib' (/usr/lib/python3/dist-packages/scipy/_lib/__init__.py)

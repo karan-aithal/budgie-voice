@@ -111,6 +111,7 @@ async def main_async() -> None:
     _state_cbs: list[Callable[[SessionState], None]] = []
     _low_conf_cbs: list[Callable[[], None]] = []
     _level_cbs: list[Callable[[float], None]] = []
+    _preview_widget_holder: dict[str, object] = {}
 
     def _on_state(state: SessionState) -> None:
         for cb in _state_cbs:
@@ -124,6 +125,14 @@ async def main_async() -> None:
         for cb in _level_cbs:
             cb(level)
 
+    async def _on_preview(text: str) -> str | None:
+        widget = _preview_widget_holder.get("widget")
+        if widget is None:
+            return text
+        future = loop.create_future()
+        widget.show_preview(text, lambda r: future.set_result(r))  # type: ignore[attr-defined]
+        return await future
+
     # ------------------------------------------------------------------
     # DictationService
     # ------------------------------------------------------------------
@@ -131,7 +140,7 @@ async def main_async() -> None:
         adapter=adapter, client=client, pipeline=pipeline,
         injector=injector, verifier=verifier, settings=settings,
         on_state_change=_on_state, on_low_confidence=_on_low_conf,
-        on_audio_level=_on_level,
+        on_audio_level=_on_level, on_preview=_on_preview,
     )
 
     # ------------------------------------------------------------------
@@ -182,6 +191,7 @@ async def main_async() -> None:
     stop_event = asyncio.Event()
 
     try:
+        from myna.indicator.preview_widget import PreviewWidget  # noqa: PLC0415
         from myna.indicator.recorder_widget import FloatingRecorderWidget  # noqa: PLC0415
         from myna.indicator.tray import TrayIcon, TrayState  # noqa: PLC0415
         from myna.settings_ui.window import SettingsWindow  # noqa: PLC0415
@@ -201,6 +211,7 @@ async def main_async() -> None:
             asyncio.run_coroutine_threadsafe(dict_svc.cancel(), loop)
 
         recorder_widget = FloatingRecorderWidget(on_cancel=_on_cancel_clicked)
+        _preview_widget_holder["widget"] = PreviewWidget()
 
         def _update_recorder_widget(state: SessionState) -> None:
             if state == SessionState.RECORDING:
