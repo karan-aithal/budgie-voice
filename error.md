@@ -22,7 +22,24 @@ VAD tuned params (min speech/silence duration, per-chunk probability) — myna's
 
 Corruption detection + re-download for cached models — myna trusts local model cache blindly. Small robustness gap, low priority.
 
+------------------------------------------------
 
+Voice detection:
+
+Adaptive gain — normalize RMS per session instead of fixed 90%, avoids re-tuning by hand when BT link level drifts. Cheap (few lines in capture.py), fixes both clipping and too-quiet cases.
+Route low-confidence-rejected segments into preview too, tagged "uncertain," instead of hard-discard+notify. You already built the review box — reuse it so borderline speech doesn't just vanish. Recommended, near-zero new code, pairs directly with what's already shipped.
+Ambient-noise-floor sample at session start → auto-pick VAD aggressiveness instead of static config value.
+Learn from correction:
+
+Extend corrections.py past single-word replace opcodes to short phrase substitutions (insert/delete runs too, e.g. "wont to"→"want to") — more coverage, still just difflib, no new deps.
+Manual correction-dictionary entry point in Settings UI (add/edit/delete pairs directly) — VoiceInk has this, you don't. Reuses the same JSON store.
+Surface correction stats somewhere visible (tray tooltip or settings tab: "12 auto-fixes applied this week") — cheap, closes the loop so the learning isn't invisible.
+Top pick overall: #2 in voice detection (route rejects to preview) — directly reuses infra you just built, biggest quality win for near-zero cost. Say which to build.
+
+
+Making it "work on all GNOME distros via IBus" for real means writing a genuine IBus input-method engine (D-Bus org.freedesktop.IBus.Engine, engine XML registration, restart ibus-daemon on install) — a real subsystem, not a cleanup.
+
+-------------------------------------------------------
 Issue -0---------
 
 EnrollWorker error: Failed to load speaker model: cannot import name '_ccallback_c' from 'scipy._lib' (/usr/lib/python3/dist-packages/scipy/_lib/__init__.py)
