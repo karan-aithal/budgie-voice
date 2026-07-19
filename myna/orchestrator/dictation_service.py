@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable
 import numpy as np
 
 from myna.audio.adapter import AudioAdapter
+from myna.audio.spectrum import AudioLevel, analyze
 from myna.config.settings import Settings
 from myna.injection.base import TextOutputBackend
 from myna.injection.xdotool import _get_focused_window
@@ -54,7 +55,7 @@ class DictationService:
         settings: Settings,
         on_state_change: Callable[[SessionState], None] | None = None,
         on_low_confidence: Callable[[], None] | None = None,
-        on_audio_level: Callable[[float], None] | None = None,
+        on_audio_level: Callable[[AudioLevel], None] | None = None,
         on_preview: Callable[[str], Awaitable[str | None]] | None = None,
     ) -> None:
         self._adapter = adapter
@@ -211,7 +212,7 @@ class DictationService:
                 if self._settings.speaker.enabled:
                     self._audio_buf.append(pcm.astype(np.float32) / 32_767.0)
                 if self._on_audio_level is not None and len(pcm):
-                    self._on_audio_level(float(np.abs(pcm).max()) / 32_767.0)
+                    self._on_audio_level(analyze(pcm))
                 await self._client.send_frame(frame)
         except asyncio.CancelledError:
             pass

@@ -7,8 +7,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from myna.injection.secure import SecureFieldDetector
-from myna.injection.xdg import XdgBackend
-from myna.injection.wayland import WaylandBackend
 
 
 # ---------------------------------------------------------------------------
@@ -104,48 +102,16 @@ class TestXdotoolBackend:
 
 
 # ---------------------------------------------------------------------------
-# Stub backends raise NotImplementedError
-# ---------------------------------------------------------------------------
-
-def test_xdg_raises() -> None:
-    b = XdgBackend()
-    with pytest.raises(NotImplementedError):
-        asyncio.run(b.commit_text("x"))
-
-
-def test_wayland_raises() -> None:
-    b = WaylandBackend()
-    with pytest.raises(NotImplementedError):
-        asyncio.run(b.commit_text("x"))
-
-
-# ---------------------------------------------------------------------------
 # BackendSelector
 # ---------------------------------------------------------------------------
 
 class TestBackendSelector:
-    def test_auto_falls_back_to_null(self) -> None:
-        """On Windows / CI, IBus + xdotool are absent → auto should not crash."""
+    def test_explicit_xdotool(self) -> None:
         from myna.injection.selector import select_backend  # noqa: PLC0415
 
-        with (
-            patch("myna.injection.ibus.is_ibus_running", return_value=False),
-            patch("myna.injection.xdotool._check_xdotool", return_value=None),
-        ):
+        with patch("myna.injection.xdotool._check_xdotool", return_value=None):
             backend = select_backend("xdotool", delay_ms=0)
             assert backend.backend_name == "xdotool"
-
-    def test_explicit_xdg(self) -> None:
-        from myna.injection.selector import select_backend  # noqa: PLC0415
-
-        backend = select_backend("xdg")
-        assert backend.backend_name == "xdg"
-
-    def test_explicit_wayland(self) -> None:
-        from myna.injection.selector import select_backend  # noqa: PLC0415
-
-        backend = select_backend("wayland")
-        assert backend.backend_name == "wayland"
 
     def test_unknown_raises(self) -> None:
         from myna.injection.selector import select_backend  # noqa: PLC0415

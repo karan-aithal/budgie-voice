@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-import uuid
 from typing import TYPE_CHECKING, AsyncIterator
 
 import numpy as np
@@ -133,6 +132,5 @@ class AudioAdapter:
             channels=1,
             format=self._audio_settings.format,
             timestamp_ms=time.time() * 1000.0,
-            frame_id=str(uuid.uuid4()),
             is_end_of_speech=is_end_of_speech,
         )

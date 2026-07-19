@@ -2,17 +2,20 @@
 
 Selection order for ``"auto"`` mode:
     1. Native Wayland session (``XDG_SESSION_TYPE=wayland``) →
-       :class:`~myna.injection.ydotool_backend.YdotoolBackend` — IBus/xdotool
-       both inject via X11 XTEST, which is a no-op against native Wayland
+       :class:`~myna.injection.ydotool_backend.YdotoolBackend` — xdotool
+       injects via X11 XTEST, which is a no-op against native Wayland
        windows (Mutter et al. don't forward synthetic X11 input to them).
        ydotool goes through ``/dev/uinput`` instead, which is
-       compositor-agnostic.
-    2. :class:`~myna.injection.ibus.IBusBackend` — if IBus daemon is running
-       (X11 sessions only).
-    3. :class:`~myna.injection.xdotool.XdotoolBackend` — X11 fallback.
+       compositor-agnostic. Requires the ``ydotool`` package and the running
+       user in the ``input`` group (or a udev rule granting ``/dev/uinput``
+       access) — that's the actual portability requirement across
+       GNOME/Wayland distros, not IBus (IBus is an input-method framework,
+       not a text-injection transport; committing text into an arbitrary
+       focused window over IBus requires registering as its active engine,
+       which this project doesn't implement).
+    2. :class:`~myna.injection.xdotool.XdotoolBackend` — X11 fallback.
 
-Explicit selections (``"ibus"``, ``"xdotool"``, ``"xdg"``, ``"wayland"``,
-``"ydotool"``) bypass probing.
+Explicit selections (``"xdotool"``, ``"ydotool"``) bypass probing.
 """
 from __future__ import annotations
 
@@ -32,8 +35,7 @@ def select_backend(
     """Instantiate and return the appropriate :class:`TextOutputBackend`.
 
     Args:
-        backend_name: One of ``"auto"``, ``"ibus"``, ``"xdotool"``,
-            ``"xdg"``, ``"wayland"``.
+        backend_name: One of ``"auto"``, ``"xdotool"``, ``"ydotool"``.
         delay_ms: Per-keystroke delay forwarded to the chosen backend.
 
     Returns:
@@ -46,18 +48,8 @@ def select_backend(
     match backend_name:
         case "auto":
             return _auto_select(delay_ms)
-        case "ibus":
-            return _make_ibus(delay_ms)
         case "xdotool":
             return _make_xdotool(delay_ms)
-        case "xdg":
-            from myna.injection.xdg import XdgBackend  # noqa: PLC0415
-
-            return XdgBackend()
-        case "wayland":
-            from myna.injection.wayland import WaylandBackend  # noqa: PLC0415
-
-            return WaylandBackend()
         case "ydotool":
             return _make_ydotool(delay_ms)
         case _:
@@ -70,7 +62,7 @@ def select_backend(
 
 
 def _auto_select(delay_ms: int) -> TextOutputBackend:
-    """On native Wayland, prefer ydotool; else probe IBus, fall back to xdotool."""
+    """On native Wayland, prefer ydotool; else fall back to xdotool (X11)."""
     if os.environ.get("XDG_SESSION_TYPE") == "wayland":
         from myna.injection.ydotool_backend import is_ydotool_available  # noqa: PLC0415
 
@@ -85,27 +77,12 @@ def _auto_select(delay_ms: int) -> TextOutputBackend:
         else:
             _LOG.warning(
                 "Native Wayland session but ydotool not installed — falling back to "
-                "xdotool/XTEST (sudo apt install ydotool for working text injection)"
+                "xdotool/XTEST (sudo apt install ydotool, add yourself to the 'input' "
+                "group or add a udev rule for /dev/uinput, for working text injection)"
             )
 
-    from myna.injection.ibus import is_ibus_running  # noqa: PLC0415
-
-    if is_ibus_running():
-        try:
-            backend = _make_ibus(delay_ms)
-            _LOG.info("Injection backend selected: ibus")
-            return backend
-        except MynaInjectionError:
-            pass
-
-    _LOG.info("Injection backend selected: xdotool (IBus unavailable)")
+    _LOG.info("Injection backend selected: xdotool")
     return _make_xdotool(delay_ms)
-
-
-def _make_ibus(delay_ms: int) -> TextOutputBackend:
-    from myna.injection.ibus import IBusBackend  # noqa: PLC0415
-
-    return IBusBackend(delay_ms=delay_ms)
 
 
 def _make_xdotool(delay_ms: int) -> TextOutputBackend:

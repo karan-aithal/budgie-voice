@@ -4,7 +4,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
-import uuid
 from pathlib import Path
 from typing import AsyncIterator
 
@@ -106,11 +105,6 @@ class FasterWhisperBackend(InferenceBackend):
         for seg in segments:
             yield seg
 
-    async def unload(self) -> None:
-        """Release model from memory."""
-        self._model = None
-        _LOG.info("FasterWhisperBackend unloaded")
-
     async def capabilities(self) -> BackendCapabilities:
         """Return backend capabilities."""
         return BackendCapabilities(
@@ -181,7 +175,6 @@ class FasterWhisperBackend(InferenceBackend):
                         confidence=confidence,
                         is_final=True,
                         language=info.language,
-                        segment_id=str(uuid.uuid4()),
                     )
                 )
                 _LOG.debug("Transcribed: conf=%.2f lang=%s", confidence, info.language)

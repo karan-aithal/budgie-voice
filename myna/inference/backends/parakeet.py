@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from typing import AsyncIterator
 
 import numpy as np
@@ -106,11 +105,6 @@ class ParakeetBackend(InferenceBackend):
         if seg is not None:
             yield seg
 
-    async def unload(self) -> None:
-        """Release model from memory."""
-        self._model = None
-        _LOG.info("ParakeetBackend unloaded")
-
     async def capabilities(self) -> BackendCapabilities:
         """Return backend capabilities."""
         return BackendCapabilities(
@@ -153,5 +147,4 @@ class ParakeetBackend(InferenceBackend):
             confidence=0.9,
             is_final=True,
             language=language,
-            segment_id=str(uuid.uuid4()),
         )

@@ -228,7 +228,6 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
                         "confidence": seg.confidence,
                         "is_final": seg.is_final,
                         "language": seg.language,
-                        "segment_id": seg.segment_id,
                     }
                 )
             )

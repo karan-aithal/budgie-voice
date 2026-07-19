@@ -4,7 +4,7 @@ Well-known name : ``com.canonical.Myna``
 Object path     : ``/com/canonical/Myna``
 Interface       : ``com.canonical.Myna``
 
-Methods : ``Toggle()``, ``GetState() → s``, ``GetCapabilities() → s``
+Methods : ``Toggle()``, ``GetState() → s``, ``Reload()``
 Signal  : ``StateChanged(state: s)``
 
 Runs in a background GLib event loop thread; dispatches async coroutines
@@ -15,7 +15,6 @@ Gracefully no-ops when ``dbus-python`` is not available (non-Linux / CI).
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import threading
 from typing import TYPE_CHECKING, Callable
@@ -78,10 +77,6 @@ class MynaDBusService:
             @dbus.service.method(_INTERFACE)
             def Toggle(self) -> None:  # noqa: N802
                 asyncio.run_coroutine_threadsafe(service_ref.toggle(), loop_ref)
-
-            @dbus.service.method(_INTERFACE, out_signature="s")
-            def GetCapabilities(self) -> str:  # noqa: N802
-                return json.dumps({"interface_version": "1.0", "modes": ["toggle", "push_to_hold"]})
 
             @dbus.service.method(_INTERFACE)
             def Reload(self) -> None:  # noqa: N802

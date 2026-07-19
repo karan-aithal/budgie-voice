@@ -33,13 +33,11 @@ class Capitalizer:
     def __init__(self, enabled: bool = True) -> None:
         self._enabled = enabled
 
-    def apply(self, text: str, *, at_injection_start: bool = True) -> str:
+    def apply(self, text: str) -> str:
         """Capitalise sentence starts in *text*.
 
         Args:
             text: Punctuation-processed string.
-            at_injection_start: Whether to capitalise the very first letter
-                (set ``False`` when appending mid-sentence to existing text).
 
         Returns:
             Text with sentence starts capitalised.
@@ -48,7 +46,7 @@ class Capitalizer:
             return text
 
         chars = list(text)
-        capitalize_next = at_injection_start
+        capitalize_next = True
         i = 0
 
         while i < len(chars):

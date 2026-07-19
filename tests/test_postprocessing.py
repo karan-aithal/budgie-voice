@@ -112,10 +112,6 @@ class TestCapitalizer:
         cap = Capitalizer(enabled=False)
         assert cap.apply("hello") == "hello"
 
-    def test_no_cap_at_injection_start_false(self) -> None:
-        result = self.cap.apply("world", at_injection_start=False)
-        assert result == "world"
-
 
 # ---------------------------------------------------------------------------
 # LanguageCleanup

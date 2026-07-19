@@ -2,9 +2,9 @@
 
 > Named after the myna bird — listens intently, reproduces speech as clean text.
 
-100 % local voice-to-text for Ubuntu 24.04 LTS (X11).  Speak → text appears in any focused window.  No audio ever leaves the machine.
+100 % local voice-to-text for Ubuntu 24.04 LTS (X11 and native Wayland/GNOME).  Speak → text appears in any focused window.  No audio ever leaves the machine.
 
-**Stack:** Python 3.12 · Faster-Whisper · Silero VAD · ECAPA-TDNN · PyQt6 · xdotool/IBus · systemd
+**Stack:** Python 3.12 · Faster-Whisper · Silero VAD · ECAPA-TDNN · PyQt6 · ydotool/xdotool · systemd
 
 ---
 
@@ -47,7 +47,7 @@ Copy the example: `cp config.yaml.example ~/.config/myna/config.yaml`int8
 | `inference.language` | `en` | BCP-47 language code |
 | `inference.confidence_threshold` | `0.55` | Discard segments below this |
 | `inference.beam_size` | `5` | Whisper beam size (1 = fastest greedy) |
-| `injection.backend` | `auto` | `auto` \| `ibus` \| `xdotool` |
+| `injection.backend` | `auto` | `auto` \| `ydotool` \| `xdotool` |
 | `speaker.enabled` | `true` | Speaker verification on/off |
 | `speaker.threshold` | `0.75` | Cosine similarity cutoff |
 | `vad.aggressiveness` | `2` | Silero VAD 0 (permissive) – 3 (strict) |
@@ -174,7 +174,6 @@ Restart=on-failure
 RestartSec=5
 Environment=DISPLAY=:0
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
-Environment=IBUS_ADDRESS_FILE=%h/.config/ibus/bus
 
 [Install]
 WantedBy=graphical-session.target
@@ -190,6 +189,7 @@ WantedBy=graphical-session.target
 |---|---|
 | `MynaMicError` | `sudo apt install libportaudio2`; check `audio.device` in config |
 | `xdotool not found` | `sudo apt install xdotool` |
+| No text injected on Wayland/GNOME | `sudo apt install ydotool`; add yourself to the `input` group (or add a udev rule for `/dev/uinput`), then re-login |
 | Text injected into wrong window | Ensure focus is in target window **before** pressing hotkey |
 | No text injected after hotkey | Lower `inference.confidence_threshold`; check `journalctl --user -u myna` |
 | Speaker verify always fails | Re-enroll: `python3.12 -m myna.speaker.enroller` |
@@ -245,12 +245,10 @@ myna/
 │   └── pipeline.py                # Chains all processors
 ├── injection/
 │   ├── base.py                    # TextOutputBackend ABC (versioned)
-│   ├── xdotool.py                 # X11 fallback
-│   ├── ibus.py                    # IBus-aware injection
+│   ├── xdotool.py                 # X11 fallback (XTEST — no-op on native Wayland)
+│   ├── ydotool_backend.py         # /dev/uinput injection — Wayland-safe
 │   ├── secure.py                  # SecureFieldDetector (xprop)
-│   ├── selector.py                # Auto-select ibus | xdotool
-│   ├── xdg.py                     # Stub (future)
-│   └── wayland.py                 # Stub (future)
+│   └── selector.py                # Auto-select ydotool (Wayland) | xdotool (X11)
 ├── speaker/
 │   ├── verifier.py                # ECAPA-TDNN cosine-sim verification
 │   ├── enroller.py                # PyQt6 QWizard enrollment

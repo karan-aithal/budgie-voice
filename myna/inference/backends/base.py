@@ -89,10 +89,6 @@ class InferenceBackend(ABC):
         """
 
     @abstractmethod
-    async def unload(self) -> None:
-        """Release model from memory."""
-
-    @abstractmethod
     async def capabilities(self) -> BackendCapabilities:
         """Return backend capability metadata."""
 

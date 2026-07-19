@@ -7,24 +7,12 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from myna.inference.protocol import (
-    AudioFrame,
-    CapabilitiesResponse,
-    ChannelType,
-    ControlMessage,
-    TranscriptSegment,
-)
+from myna.inference.protocol import AudioFrame, TranscriptSegment
 
 
 # ---------------------------------------------------------------------------
 # Protocol message types
 # ---------------------------------------------------------------------------
-
-def test_audio_frame_uuid_unique() -> None:
-    f1 = AudioFrame(data=b"\x00" * 32)
-    f2 = AudioFrame(data=b"\x00" * 32)
-    assert f1.frame_id != f2.frame_id
-
 
 def test_audio_frame_timestamp_set() -> None:
     import time
@@ -51,33 +39,11 @@ def test_transcript_segment_fields() -> None:
         confidence=0.87,
         is_final=True,
         language="en",
-        segment_id="abc-123",
     )
     assert seg.text == "Hello world"
     assert seg.confidence == pytest.approx(0.87)
     assert seg.is_final is True
     assert seg.language == "en"
-
-
-def test_control_message_default_version() -> None:
-    msg = ControlMessage(action="capabilities", payload={})
-    assert msg.version == "1.0"
-
-
-def test_capabilities_response() -> None:
-    cap = CapabilitiesResponse(
-        version="1.0",
-        backends=["faster_whisper"],
-        languages=["en", "fr"],
-        models=["small", "medium"],
-    )
-    assert "faster_whisper" in cap.backends
-    assert "en" in cap.languages
-
-
-def test_channel_type_values() -> None:
-    assert ChannelType.CONTROL == "control"
-    assert ChannelType.DATA == "data"
 
 
 # ---------------------------------------------------------------------------

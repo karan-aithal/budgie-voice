@@ -23,13 +23,10 @@ def test_audio_frame_defaults() -> None:
     assert frame.channels == 1
     assert frame.format == "pcm16"
     assert frame.is_end_of_speech is False
-    assert len(frame.frame_id) == 36  # UUID format
 
 
 def test_transcript_segment_fields() -> None:
-    seg = TranscriptSegment(
-        text="hello", confidence=0.9, is_final=True, language="en", segment_id="x"
-    )
+    seg = TranscriptSegment(text="hello", confidence=0.9, is_final=True, language="en")
     assert seg.text == "hello"
     assert seg.is_final is True
 

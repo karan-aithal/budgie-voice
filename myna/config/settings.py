@@ -30,7 +30,6 @@ class AudioSettings:
     sample_rate: int = 16000
     chunk_duration_ms: int = 30
     format: Literal["pcm16", "float32"] = "pcm16"
-    max_buffer_seconds: int = 30
     denoise: bool = True
 
 
@@ -69,7 +68,6 @@ class SpeakerSettings:
     enabled: bool = True
     voiceprint_path: str = "~/.config/myna/voiceprint.pt"
     threshold: float = 0.65
-    min_samples: int = 5
 
 
 @dataclass
@@ -92,7 +90,6 @@ class PostprocessingSettings:
     auto_capitalize: bool = True
     punctuation_commands: bool = True
     language_cleanup: bool = True
-    llm_cleanup: bool = False
 
 
 @dataclass
@@ -101,24 +98,15 @@ class InjectionSettings:
 
     backend: str = "auto"
     delay_ms: int = 12
-    clear_modifiers: bool = True
     block_secure_fields: bool = True
     preview_before_inject: bool = True
 
 
 @dataclass
-class DbusSettings:
-    """DBus IPC configuration."""
-
-    well_known_name: str = "com.canonical.Myna"
-
-
-@dataclass
 class IndicatorSettings:
-    """System tray indicator configuration."""
+    """Floating recording-overlay configuration."""
 
-    enabled: bool = True
-    show_tooltip_state: bool = True
+    visualizer: Literal["waveform", "blob"] = "waveform"
 
 
 @dataclass
@@ -137,17 +125,6 @@ class NotificationSettings:
     tool: str = "notify-send"
     low_confidence_message: str = "⚠️ Couldn't hear you — repeat?"
     secure_field_message: str = "🔒 Dictation blocked in secure field."
-    no_mic_message: str = "🎤 No microphone found."
-
-
-@dataclass
-class PerformanceSettings:
-    """Performance targets (ms)."""
-
-    mic_start_target_ms: int = 100
-    indicator_visible_target_ms: int = 200
-    first_transcription_target_ms: int = 800
-    final_commit_target_ms: int = 2000
 
 
 @dataclass
@@ -162,11 +139,9 @@ class Settings:
     learning: LearningSettings = field(default_factory=LearningSettings)
     postprocessing: PostprocessingSettings = field(default_factory=PostprocessingSettings)
     injection: InjectionSettings = field(default_factory=InjectionSettings)
-    dbus: DbusSettings = field(default_factory=DbusSettings)
     indicator: IndicatorSettings = field(default_factory=IndicatorSettings)
     logging: LoggingSettings = field(default_factory=LoggingSettings)
     notifications: NotificationSettings = field(default_factory=NotificationSettings)
-    performance: PerformanceSettings = field(default_factory=PerformanceSettings)
 
 
 def _merge(instance: object, data: dict) -> None:

@@ -5,7 +5,7 @@
 #   CPU-only : pip install torch>=2.0.0 torchaudio>=2.0.0 --index-url https://download.pytorch.org/whl/cpu
 #   CUDA 12  : pip install torch>=2.0.0 torchaudio>=2.0.0 --index-url https://download.pytorch.org/whl/cu121
 #
-# System (apt): xdotool ibus python3-ibus libportaudio2 libnotify-bin
+# System (apt): xdotool ydotool libportaudio2 libnotify-bin
 #               python3-pyqt6 python3-dbus python3-gi
 
 # ── STT inference ─────────────────────────────────────────────────────────────
@@ -47,7 +47,6 @@ pyyaml>=6.0
 # ── UI + hotkey ───────────────────────────────────────────────────────────────
 PyQt6>=6.6.0
 qasync>=0.27.0
-pyqtgraph>=0.13.3
 pynput>=1.7.6
 
 # ── IPC ───────────────────────────────────────────────────────────────────────

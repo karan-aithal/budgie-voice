@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Callable
 
 from myna.audio.adapter import AudioAdapter
+from myna.audio.spectrum import AudioLevel
 from myna.config.settings import Settings, load_settings
 from myna.dbus.service import MynaDBusService
 from myna.inference.backends.registry import get_backend
@@ -110,7 +111,7 @@ async def main_async() -> None:
     # ------------------------------------------------------------------
     _state_cbs: list[Callable[[SessionState], None]] = []
     _low_conf_cbs: list[Callable[[], None]] = []
-    _level_cbs: list[Callable[[float], None]] = []
+    _level_cbs: list[Callable[[AudioLevel], None]] = []
     _preview_widget_holder: dict[str, object] = {}
 
     def _on_state(state: SessionState) -> None:
@@ -121,7 +122,7 @@ async def main_async() -> None:
         for cb in _low_conf_cbs:
             cb()
 
-    def _on_level(level: float) -> None:
+    def _on_level(level: AudioLevel) -> None:
         for cb in _level_cbs:
             cb(level)
 
@@ -210,7 +211,9 @@ async def main_async() -> None:
         def _on_cancel_clicked() -> None:
             asyncio.run_coroutine_threadsafe(dict_svc.cancel(), loop)
 
-        recorder_widget = FloatingRecorderWidget(on_cancel=_on_cancel_clicked)
+        recorder_widget = FloatingRecorderWidget(
+            on_cancel=_on_cancel_clicked, style=settings.indicator.visualizer
+        )
         _preview_widget_holder["widget"] = PreviewWidget()
 
         def _update_recorder_widget(state: SessionState) -> None:

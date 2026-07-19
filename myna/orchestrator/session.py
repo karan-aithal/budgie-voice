@@ -8,9 +8,7 @@ Lifecycle::
 """
 from __future__ import annotations
 
-import asyncio
 import logging
-from dataclasses import dataclass
 from enum import StrEnum
 
 from myna.utils.exceptions import MynaSessionError
@@ -41,32 +39,15 @@ _ACTIVE = frozenset(
 )
 
 
-@dataclass
-class SessionEvent:
-    """Event emitted by DictationSession on every state transition.
-
-    Attributes:
-        state: New state after this transition.
-        window_id: Locked target window (set on STARTING).
-        error: Error message (set on ERROR).
-    """
-
-    state: SessionState
-    window_id: int | None = None
-    error: str | None = None
-
-
 class DictationSession:
     """Pure state machine for a single dictation session.
 
-    Emits :class:`SessionEvent` objects into an asyncio Queue on every
-    transition; does NOT process audio or run inference.
+    Does NOT process audio or run inference.
     """
 
     def __init__(self) -> None:
         self._state = SessionState.IDLE
         self._target_window_id: int | None = None
-        self._events: asyncio.Queue[SessionEvent] = asyncio.Queue()
 
     # ------------------------------------------------------------------
     # Properties
@@ -79,10 +60,6 @@ class DictationSession:
     @property
     def target_window_id(self) -> int | None:
         return self._target_window_id
-
-    @property
-    def events(self) -> asyncio.Queue[SessionEvent]:
-        return self._events
 
     @property
     def is_active(self) -> bool:
@@ -102,11 +79,6 @@ class DictationSession:
         """STARTING → RECORDING."""
         self._require(SessionState.STARTING)
         await self._emit(SessionState.RECORDING)
-
-    async def to_transcribing(self) -> None:
-        """RECORDING → TRANSCRIBING."""
-        self._require(SessionState.RECORDING)
-        await self._emit(SessionState.TRANSCRIBING)
 
     async def to_finalizing(self) -> None:
         """RECORDING | TRANSCRIBING → FINALIZING."""
@@ -129,11 +101,6 @@ class DictationSession:
         await self._emit(SessionState.CANCELLED)
         await self._emit(SessionState.IDLE)
 
-    async def to_error(self, message: str) -> None:
-        """Any state → ERROR → IDLE."""
-        await self._emit(SessionState.ERROR, error=message)
-        await self._emit(SessionState.IDLE)
-
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -146,5 +113,4 @@ class DictationSession:
 
     async def _emit(self, state: SessionState, **kwargs: object) -> None:
         self._state = state
-        await self._events.put(SessionEvent(state=state, **kwargs))
         _LOG.debug("Session state → %s", state)
