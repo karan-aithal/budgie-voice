@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import subprocess
 import time
 from typing import TYPE_CHECKING, AsyncIterator
 
@@ -17,6 +18,20 @@ if TYPE_CHECKING:
     from myna.config.settings import AudioSettings, VadSettings
 
 _LOG = logging.getLogger(__name__)
+
+
+def _play_open_cue() -> None:
+    """Fire-and-forget click cue on mic open, via the desktop's XDG sound theme
+    (same mechanism GNOME uses for the caps-lock toggle click). Best-effort —
+    missing canberra-gtk-play or no sound server must never block capture.
+    """
+    try:
+        subprocess.Popen(
+            ["canberra-gtk-play", "-i", "onboard-key-feedback"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        _LOG.debug("canberra-gtk-play not available — skipping open cue")
 
 
 class AudioAdapter:
@@ -66,6 +81,12 @@ class AudioAdapter:
         self._chunks = 0
         self._forwarded = 0
         self._end_events = 0
+        # Cue must fire before capture.start(): on BT headsets, start() switches
+        # the card to HFP/mSBC, which carries mic input over the same single
+        # SCO link as any output — a cue played after that would collide with
+        # the mic stream it just opened. Play it now, while output still runs
+        # over the original (A2DP) path.
+        _play_open_cue()
         self._capture.start()
         _LOG.info("AudioAdapter opened")
 

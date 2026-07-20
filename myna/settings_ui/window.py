@@ -105,6 +105,7 @@ class SettingsWindow(QDialog):
         form.addWidget(self._audio_group())
         form.addWidget(self._speaker_group())
         form.addWidget(self._postproc_group())
+        form.addWidget(self._indicator_group())
 
         privacy = QLabel("🔒 Speech recognition runs locally. No audio is saved.")
         privacy.setStyleSheet("color: gray; font-style: italic;")
@@ -273,6 +274,16 @@ class SettingsWindow(QDialog):
         self._speaker_chk.setChecked(self._settings.speaker.enabled)
         fl.addRow(self._speaker_chk)
 
+        self._speaker_thresh_slider = QSlider(Qt.Orientation.Horizontal)
+        self._speaker_thresh_slider.setRange(0, 100)
+        self._speaker_thresh_slider.setValue(int(self._settings.speaker.threshold * 100))
+        self._speaker_thresh_label = QLabel(f"{self._settings.speaker.threshold:.2f}")
+        self._speaker_thresh_slider.valueChanged.connect(
+            lambda v: self._speaker_thresh_label.setText(f"{v / 100:.2f}")
+        )
+        fl.addRow("Verification threshold:", self._speaker_thresh_slider)
+        fl.addRow("", self._speaker_thresh_label)
+
         from PyQt6.QtWidgets import QPushButton  # noqa: PLC0415  # already imported at top
 
         enroll_btn = QPushButton("🎤  Enroll Now")
@@ -305,7 +316,26 @@ class SettingsWindow(QDialog):
     # Save
     # ------------------------------------------------------------------
 
+    def _indicator_group(self) -> QGroupBox:
+        box = QGroupBox("Recording Overlay")
+        fl = QFormLayout(box)
+
+        self._visualizer_combo = QComboBox()
+        self._visualizer_combo.addItems(["waveform", "blob"])
+        self._visualizer_combo.setCurrentText(self._settings.indicator.visualizer)
+        fl.addRow("Visualizer:", self._visualizer_combo)
+        return box
+
     def _save(self) -> None:
+        # Merge into whatever's already on disk instead of overwriting wholesale —
+        # config.yaml can carry hand-tuned keys this dialog doesn't expose
+        # (e.g. audio.denoise, vad.aggressiveness), and a plain overwrite silently
+        # discards them on the next Save.
+        base: dict = {}
+        if _CONFIG_PATH.exists():
+            with _CONFIG_PATH.open("r", encoding="utf-8") as fh:
+                base = yaml.safe_load(fh) or {}
+
         cfg = {
             "activation": {
                 "hotkey": self._hotkey_edit.text(),
@@ -318,18 +348,25 @@ class SettingsWindow(QDialog):
                 "language": self._lang_edit.text().strip(),
                 "confidence_threshold": round(self._conf_slider.value() / 100, 2),
             },
-            "speaker": {"enabled": self._speaker_chk.isChecked()},
+            "speaker": {
+                "enabled": self._speaker_chk.isChecked(),
+                "threshold": round(self._speaker_thresh_slider.value() / 100, 2),
+            },
             "postprocessing": {
                 "normalize_numbers": self._num_chk.isChecked(),
                 "punctuation_commands": self._punct_chk.isChecked(),
                 "auto_capitalize": self._cap_chk.isChecked(),
                 "language_cleanup": self._lang_chk.isChecked(),
             },
+            "indicator": {"visualizer": self._visualizer_combo.currentText()},
         }
+
+        for section, values in cfg.items():
+            base.setdefault(section, {}).update(values)
 
         _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with _CONFIG_PATH.open("w", encoding="utf-8") as fh:
-            yaml.dump(cfg, fh, default_flow_style=False, allow_unicode=True)
+            yaml.dump(base, fh, default_flow_style=False, allow_unicode=True)
         _LOG.info("Settings saved to %s", _CONFIG_PATH)
 
         try:

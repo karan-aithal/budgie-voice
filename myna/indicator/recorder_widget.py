@@ -167,6 +167,9 @@ class FloatingRecorderWidget(QWidget):
         self._position_bottom_center()
         self.show()
         self.raise_()
+        # X11 WMs often ignore move() issued before the window is mapped —
+        # re-place once the window actually exists on screen.
+        QTimer.singleShot(0, self._position_bottom_center)
 
     def show_transcribing(self) -> None:
         """Switch the overlay to "Transcribing" state — dot freezes, animation keeps flowing."""
@@ -174,6 +177,7 @@ class FloatingRecorderWidget(QWidget):
         self._pulse_timer.stop()
         self._pulse_on = True
         self._anim_timer.start()
+        self.raise_()
 
     def hide_widget(self) -> None:
         """Hide the overlay (any state that isn't recording/transcribing)."""
@@ -213,6 +217,10 @@ class FloatingRecorderWidget(QWidget):
         blend = attack if vel_energy > self._impact else release
         self._impact = blend * self._impact + (1.0 - blend) * vel_energy
 
+        # Force-reassert top stacking every tick — some WMs (e.g. Mutter)
+        # drop WindowStaysOnTopHint's effect once another window is focused;
+        # raise_() here keeps clicking into other apps from burying us.
+        self.raise_()
         self.update()
 
     def _position_bottom_center(self) -> None:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
@@ -291,6 +292,13 @@ class _NullBackend(TextOutputBackend):
 
 def main() -> None:
     try:
+        # Native Wayland toplevels can't be positioned or forced always-on-top
+        # (no such client capability in the protocol) — route Qt through
+        # XWayland instead, where the recorder widget's move()/StaysOnTopHint
+        # are backed by real EWMH requests the WM honors.
+        if os.environ.get("XDG_SESSION_TYPE") == "wayland" and "QT_QPA_PLATFORM" not in os.environ:
+            os.environ["QT_QPA_PLATFORM"] = "xcb"
+
         from PyQt6.QtWidgets import QApplication  # noqa: PLC0415
         import qasync  # noqa: PLC0415
 
