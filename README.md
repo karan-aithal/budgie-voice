@@ -24,7 +24,11 @@ python3.12 -m myna.main
 # or as a systemd service that starts on login:
 bash scripts/install_service.sh
 ```
-
+✓ Myna installed and running.
+  Status : systemctl --user status myna
+  Logs   : journalctl --user -u myna -f
+  Enroll : python3.12 -m myna.speaker.enroller
+  
 Press **Ctrl+Space** to start dictating.  Press again to stop → text appears at cursor.
 
 ---
@@ -193,7 +197,9 @@ systemctl --user disable myna
 bash scripts/uninstall_service.sh
 ```
 
-Service unit installed at `~/.config/systemd/user/myna.service`:
+Service unit installed at `~/.config/systemd/user/myna.service`, generated with this
+checkout's own paths baked in — it runs in place via `.venv/bin/python3.12`, not a
+copied install or the system interpreter:
 
 ```ini
 [Unit]
@@ -203,8 +209,8 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3.12 -m myna.main
-WorkingDirectory=%h/.local/lib/myna
+ExecStart=/path/to/myna-voice/.venv/bin/python3.12 -m myna.main
+WorkingDirectory=/path/to/myna-voice
 Restart=on-failure
 RestartSec=5
 Environment=DISPLAY=:0
@@ -214,7 +220,8 @@ Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
 WantedBy=graphical-session.target
 ```
 
-> **Venv:** change `ExecStart` to `/path/to/.venv/bin/python3.12 -m myna.main`
+Moved the checkout? Re-run `bash scripts/install_service.sh` to regenerate the unit
+with the new path — don't hand-edit the paths above.
 
 ---
 
@@ -325,4 +332,6 @@ requirements.txt
 | `~/.config/myna/config.yaml` | User configuration |
 | `~/.config/myna/voiceprint.pt` | Enrolled speaker embedding |
 | `~/.local/share/myna/logs/myna.log` | Rotating log (5 MB × 3) |
-| `~/.cache/myna/models/` | Whisper model weights |
+| `~/.local/share/myna/models/` | Whisper model weights |
+| `~/.local/share/myna/speechbrain/` | ECAPA-TDNN speaker model |
+| `~/.local/share/myna/torch_hub/` | Silero VAD model |

@@ -1,41 +1,39 @@
 #!/usr/bin/env bash
 # Myna — install as a systemd user service
-# Usage: bash scripts/install_service.sh   (from project root, venv active)
+# Usage: bash scripts/install_service.sh   (from project root, venv created)
+#
+# Runs in place from this checkout via its own .venv/bin/python3.12 — no copy
+# to a second install directory. A copy excluding .venv/ but a unit running
+# system python3.12 is how this broke before: the service instantly hit
+# ModuleNotFoundError (system python has none of the project's deps) and
+# systemd auto-restart-looped it, exit code 1 every ~2s.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-INSTALL_DIR="${HOME}/.local/lib/myna"
+VENV_PYTHON="${PROJECT_DIR}/.venv/bin/python3.12"
 SERVICE_DIR="${HOME}/.config/systemd/user"
 SERVICE_FILE="${SERVICE_DIR}/myna.service"
 
 echo "=== Myna — Service Installation ==="
-echo "Source : ${PROJECT_DIR}"
-echo "Install: ${INSTALL_DIR}"
+echo "Project: ${PROJECT_DIR}"
 
-# ── 1. Copy project ───────────────────────────────────────────────────────
-echo "[1/4] Syncing files to ${INSTALL_DIR} …"
-mkdir -p "${INSTALL_DIR}"
-rsync -a --delete \
-    --exclude='.git/' \
-    --exclude='__pycache__/' \
-    --exclude='*.pyc' \
-    --exclude='.venv/' \
-    --exclude='models/' \
-    --exclude='.pytest_cache/' \
-    "${PROJECT_DIR}/" "${INSTALL_DIR}/"
+if [[ ! -x "${VENV_PYTHON}" ]]; then
+    echo "error: ${VENV_PYTHON} not found — run scripts/install_deps.sh first" >&2
+    exit 1
+fi
 
-# ── 2. Copy default config if absent ─────────────────────────────────────
+# ── 1. Copy default config if absent ──────────────────────────────────────
 mkdir -p "${HOME}/.config/myna"
 if [[ ! -f "${HOME}/.config/myna/config.yaml" ]]; then
     cp "${PROJECT_DIR}/config.yaml.example" "${HOME}/.config/myna/config.yaml"
     echo "Default config written to ~/.config/myna/config.yaml"
 fi
 
-# ── 3. Write service unit ─────────────────────────────────────────────────
-echo "[3/4] Writing ${SERVICE_FILE} …"
+# ── 2. Write service unit ──────────────────────────────────────────────────
+echo "[2/3] Writing ${SERVICE_FILE} …"
 mkdir -p "${SERVICE_DIR}"
-cat > "${SERVICE_FILE}" << 'UNIT'
+cat > "${SERVICE_FILE}" << UNIT
 [Unit]
 Description=Myna Voice Typing Assistant
 After=graphical-session.target
@@ -43,8 +41,8 @@ PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3.12 -m myna.main
-WorkingDirectory=%h/.local/lib/myna
+ExecStart=${VENV_PYTHON} -m myna.main
+WorkingDirectory=${PROJECT_DIR}
 Restart=on-failure
 RestartSec=5
 Environment=DISPLAY=:0
@@ -55,13 +53,13 @@ Environment=IBUS_ADDRESS_FILE=%h/.config/ibus/bus
 WantedBy=graphical-session.target
 UNIT
 
-# ── 4. Enable and start ───────────────────────────────────────────────────
-echo "[4/4] Enabling and starting myna.service …"
+# ── 3. Enable and start ────────────────────────────────────────────────────
+echo "[3/3] Enabling and starting myna.service …"
 systemctl --user daemon-reload
 systemctl --user enable --now myna
 
 echo ""
-echo "✓ Myna installed and running."
+echo "Myna installed and running."
 echo "  Status : systemctl --user status myna"
 echo "  Logs   : journalctl --user -u myna -f"
-echo "  Enroll : python3.12 -m myna.speaker.enroller"
+echo "  Enroll : ${VENV_PYTHON} -m myna.speaker.enroller"

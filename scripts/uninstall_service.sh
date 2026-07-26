@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Myna — stop, disable, and remove the systemd user service
-# Config (~/.config/myna/) and logs (~/.local/share/myna/) are preserved.
+# Runs in place from the checkout (see install_service.sh) — nothing under the
+# project directory is touched. Config (~/.config/myna/) and logs
+# (~/.local/share/myna/) are also preserved.
 set -euo pipefail
 
 SERVICE="myna"
 SERVICE_FILE="${HOME}/.config/systemd/user/${SERVICE}.service"
-INSTALL_DIR="${HOME}/.local/lib/myna"
 
 echo "=== Myna — Uninstall ==="
 
@@ -19,20 +20,8 @@ fi
 
 systemctl --user daemon-reload
 
-rm -rf "${INSTALL_DIR}"
-echo "Removed ${INSTALL_DIR}"
-
 echo ""
-echo "✓ Myna uninstalled."
+echo "Myna service uninstalled."
 echo "  Config preserved : ~/.config/myna/"
 echo "  Logs preserved   : ~/.local/share/myna/logs/"
-echo "  Remove manually if desired."
-
-echo ""
-echo "✓ Service removed."
-echo ""
-echo "Install directory preserved: ${INSTALL_DIR}"
-echo "To remove it:  rm -rf ${INSTALL_DIR}"
-echo ""
-echo "Config + voiceprint preserved: ~/.config/voice-assistant/"
-echo "To remove it:  rm -rf ~/.config/voice-assistant/"
+echo "  Project checkout and .venv left untouched."

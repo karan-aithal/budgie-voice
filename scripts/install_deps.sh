@@ -90,7 +90,7 @@ WhisperModel(
     "small",
     device="cpu",
     compute_type="int8",
-    download_root=os.path.expanduser("~/.cache/myna/models"),
+    download_root=os.path.expanduser("~/.local/share/myna/models"),
 )
 
 print("✓ Whisper model cached")
@@ -102,8 +102,10 @@ EOF
 echo "[5/5] Pre-caching Silero VAD..."
 
 "$PYTHON" - <<'EOF'
+import os
 import torch
 
+torch.hub.set_dir(os.path.expanduser("~/.local/share/myna/torch_hub"))
 torch.hub.load(
     "snakers4/silero-vad",
     "silero_vad",

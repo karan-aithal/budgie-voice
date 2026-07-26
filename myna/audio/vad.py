@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -11,6 +12,10 @@ _LOG = logging.getLogger(__name__)
 _THRESHOLD_MAP: dict[int, float] = {0: 0.85, 1: 0.75, 2: 0.50, 3: 0.35}
 _SAMPLE_RATE = 16_000
 _VAD_WINDOW = 512  # samples — Silero VAD expects 512 @ 16 kHz
+
+# torch.hub defaults to ~/.cache/torch/hub — redirect under the app's own data
+# dir so nothing myna downloads lands in ~/.cache.
+_HUB_DIR = Path.home() / ".local" / "share" / "myna" / "torch_hub"
 
 
 class VADFilter:
@@ -47,6 +52,7 @@ class VADFilter:
             self._in_speech = False
             self._pad_remaining = 0
             return
+        torch.hub.set_dir(str(_HUB_DIR))
         model, _ = torch.hub.load(
             "snakers4/silero-vad",
             "silero_vad",

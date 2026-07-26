@@ -62,7 +62,7 @@ class SpeakerVerifier:
             self._model = EncoderClassifier.from_hparams(
                 source=_HUB_SOURCE,
                 run_opts={"device": "cpu"},
-                savedir=str(Path.home() / ".cache" / "myna" / "speechbrain"),
+                savedir=str(Path.home() / ".local" / "share" / "myna" / "speechbrain"),
             )
             _LOG.info("SpeakerVerifier model loaded")
         except Exception as exc:

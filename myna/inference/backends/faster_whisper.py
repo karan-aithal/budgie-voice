@@ -135,7 +135,7 @@ class FasterWhisperBackend(InferenceBackend):
             except ImportError:
                 resolved_device = "cpu"
 
-        cache = Path.home() / ".cache" / "myna" / "models"
+        cache = Path.home() / ".local" / "share" / "myna" / "models"
         cache.mkdir(parents=True, exist_ok=True)
 
         try:
