@@ -69,6 +69,7 @@ class TrayIcon(QSystemTrayIcon):
         on_toggle: Coroutine factory called when "Toggle Listen" is clicked.
         on_enroll: Callable to open the enrollment wizard.
         on_settings: Callable to open the settings window.
+        on_restart: Callable to shut down and relaunch the app.
         on_quit: Callable to initiate application shutdown.
         log_path: Path to the rotating log file (opened with xdg-open).
         parent: Optional Qt parent.
@@ -81,6 +82,7 @@ class TrayIcon(QSystemTrayIcon):
         on_settings: Callable,
         on_quit: Callable,
         log_path: Path,
+        on_restart: Callable | None = None,
         parent: object = None,
     ) -> None:
         super().__init__(parent)  # type: ignore[call-arg]
@@ -88,7 +90,7 @@ class TrayIcon(QSystemTrayIcon):
         self._revert_timer = QTimer()
         self._revert_timer.setSingleShot(True)
 
-        self._build_menu(on_toggle, on_enroll, on_settings, on_quit, log_path)
+        self._build_menu(on_toggle, on_enroll, on_settings, on_quit, log_path, on_restart)
         self._update_icon(TrayState.IDLE)
         self.setVisible(True)
 
@@ -135,6 +137,7 @@ class TrayIcon(QSystemTrayIcon):
         on_settings: Callable,
         on_quit: Callable,
         log_path: Path,
+        on_restart: Callable | None = None,
     ) -> None:
         import subprocess  # noqa: PLC0415
 
@@ -155,6 +158,11 @@ class TrayIcon(QSystemTrayIcon):
         )
 
         menu.addSeparator()
+
+        if on_restart is not None:
+            restart_act = menu.addAction("🔄  Restart")
+            restart_act.triggered.connect(on_restart)
+
         quit_act = menu.addAction("✕  Quit")
         quit_act.triggered.connect(on_quit)
 

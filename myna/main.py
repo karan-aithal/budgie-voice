@@ -47,8 +47,13 @@ _SESSION_TO_TRAY: dict[SessionState, str] = {
 }
 
 
-async def main_async() -> None:
-    """Full async startup — works headless or with Qt tray."""
+async def main_async() -> bool:
+    """Full async startup — works headless or with Qt tray.
+
+    Returns:
+        ``True`` if the tray's Restart action asked for a relaunch. Shutdown has
+        already completed by then, so the caller can safely re-exec.
+    """
     settings = load_settings()
     setup_logging(settings.logging.level)
     loop = asyncio.get_running_loop()
@@ -191,6 +196,17 @@ async def main_async() -> None:
     # System tray (Qt required; degrade gracefully)
     # ------------------------------------------------------------------
     stop_event = asyncio.Event()
+    # Set by the tray's Restart action. Restart deliberately reuses the normal
+    # shutdown path rather than exec'ing straight away, so the BT profile is
+    # restored, the DBus name released and the inference server stopped before
+    # the new process starts contending for them.
+    restart_requested = False
+
+    def _request_restart() -> None:
+        nonlocal restart_requested
+        restart_requested = True
+        _LOG.info("Restart requested from tray — shutting down to relaunch")
+        stop_event.set()
 
     try:
         from myna.indicator.preview_widget import PreviewWidget  # noqa: PLC0415
@@ -205,6 +221,7 @@ async def main_async() -> None:
             on_enroll=lambda: EnrollmentWizard(verifier).show(),
             on_settings=lambda: SettingsWindow(dict_svc._settings).show(),
             on_quit=stop_event.set,
+            on_restart=_request_restart,
             log_path=log_path,
         )
         tray.show()
@@ -282,6 +299,8 @@ async def main_async() -> None:
         dbus_svc.stop()
         _LOG.info("Shutdown complete")
 
+    return restart_requested
+
 
 # ---------------------------------------------------------------------------
 # Null injection backend
@@ -304,7 +323,22 @@ class _NullBackend(TextOutputBackend):
 # Entry point — Qt + qasync if available, asyncio.run headless fallback
 # ---------------------------------------------------------------------------
 
+def _relaunch() -> None:
+    """Replace this process with a fresh Myna.
+
+    ``execv`` keeps the PID, so a systemd user unit sees one continuous process
+    rather than an exit it would have to restart itself. Runs only after
+    main_async's shutdown finished, so nothing is still holding the BT profile,
+    the DBus name or the inference port.
+    """
+    _LOG.info("Relaunching: %s -m myna.main", sys.executable)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os.execv(sys.executable, [sys.executable, "-m", "myna.main"])
+
+
 def main() -> None:
+    restart = False
     try:
         # Native Wayland toplevels can't be positioned or forced always-on-top
         # (no such client capability in the protocol) — route Qt through
@@ -321,15 +355,18 @@ def main() -> None:
         loop = qasync.QEventLoop(app)
         asyncio.set_event_loop(loop)
         with loop:
-            loop.run_until_complete(main_async())
+            restart = bool(loop.run_until_complete(main_async()))
     except ImportError:
         _LOG.info("PyQt6/qasync not available — running headless")
         try:
-            asyncio.run(main_async())
+            restart = bool(asyncio.run(main_async()))
         except KeyboardInterrupt:
             pass
     except KeyboardInterrupt:
         pass
+
+    if restart:
+        _relaunch()  # never returns
 
 
 if __name__ == "__main__":

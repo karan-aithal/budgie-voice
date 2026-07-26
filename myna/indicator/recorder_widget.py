@@ -19,11 +19,17 @@ from PyQt6.QtWidgets import QApplication, QPushButton, QWidget
 
 from myna.audio.spectrum import AudioLevel
 
-_WIDTH = 320
-_HEIGHT = 140
+_WIDTH = 460
+_HEIGHT = 200
 _MARGIN = 24
 _TICK_MS = 33
 _N_SAMPLES = 40
+
+# Drawing area insets. The top inset is small because there's no longer a
+# status label to clear — the visualizer owns the whole widget.
+_PAD_X = 12
+_PAD_TOP = 12
+_PAD_BOTTOM = 12
 
 _N_STRANDS = 12
 
@@ -125,8 +131,6 @@ class FloatingRecorderWidget(QWidget):
         self._scale_y = 1.0
         self._scale_y_vel = 0.0
         self._impact = 0.0  # decaying "energy" from recent spring velocity, drives turbulence
-        self._label = "Recording"
-        self._pulse_on = True
 
         self._cancel_btn = QPushButton("✕", self)
         self._cancel_btn.setGeometry(_WIDTH - 26, 6, 20, 20)
@@ -137,10 +141,6 @@ class FloatingRecorderWidget(QWidget):
             "QPushButton:hover { color: white; }"
         )
         self._cancel_btn.clicked.connect(on_cancel)
-
-        self._pulse_timer = QTimer(self)
-        self._pulse_timer.setInterval(500)
-        self._pulse_timer.timeout.connect(self._toggle_pulse)
 
         self._anim_timer = QTimer(self)
         self._anim_timer.setInterval(_TICK_MS)
@@ -154,15 +154,12 @@ class FloatingRecorderWidget(QWidget):
 
     def show_recording(self) -> None:
         """Show the overlay in "Recording" state."""
-        self._label = "Recording"
         self._levels.clear()
         self._levels.extend([_SILENT] * _N_SAMPLES)
         self._smoothed_level = 0.0
         self._scale_y = 1.0
         self._scale_y_vel = 0.0
         self._impact = 0.0
-        self._pulse_on = True
-        self._pulse_timer.start()
         self._anim_timer.start()
         self._position_bottom_center()
         self.show()
@@ -172,16 +169,17 @@ class FloatingRecorderWidget(QWidget):
         QTimer.singleShot(0, self._position_bottom_center)
 
     def show_transcribing(self) -> None:
-        """Switch the overlay to "Transcribing" state — dot freezes, animation keeps flowing."""
-        self._label = "Transcribing"
-        self._pulse_timer.stop()
-        self._pulse_on = True
+        """Keep the overlay up while inference runs — animation keeps flowing.
+
+        No audio arrives in this state, so the visualizer settles toward its
+        idle shape on its own; that decay is the visible cue that capture has
+        stopped now that the status label is gone.
+        """
         self._anim_timer.start()
         self.raise_()
 
     def hide_widget(self) -> None:
         """Hide the overlay (any state that isn't recording/transcribing)."""
-        self._pulse_timer.stop()
         self._anim_timer.stop()
         self.hide()
 
@@ -196,9 +194,6 @@ class FloatingRecorderWidget(QWidget):
 
     def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:  # noqa: N802, ARG002
         self._style = "blob" if self._style == "waveform" else "waveform"
-
-    def _toggle_pulse(self) -> None:
-        self._pulse_on = not self._pulse_on
 
     def _on_tick(self) -> None:
         self._phase += 0.18
@@ -239,21 +234,6 @@ class FloatingRecorderWidget(QWidget):
         else:
             self._paint_waveform(painter)
 
-        self._paint_label(painter)
-
-    def _paint_label(self, painter: QPainter) -> None:
-        dot_color = QColor(220, 50, 50) if self._pulse_on else QColor(120, 30, 30)
-        painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(0, 0, 0, 130))
-        painter.drawEllipse(13, 13, 10, 10)
-        painter.setBrush(dot_color)
-        painter.drawEllipse(12, 12, 10, 10)
-
-        painter.setPen(QColor(0, 0, 0, 160))
-        painter.drawText(31, 22, self._label)
-        painter.setPen(QColor(235, 235, 235))
-        painter.drawText(30, 21, self._label)
-
     def _paint_waveform(self, painter: QPainter) -> None:
         """12 flowing strands over a shared heatmap gradient: hue = dominant
         frequency band at that point in time, intensity = volume at that
@@ -266,11 +246,11 @@ class FloatingRecorderWidget(QWidget):
         for a fizzy, reactive line — rougher right after a hit, smoothing as
         the spring settles.
         """
-        area_x, area_w = 10, _WIDTH - 20
-        area_y = 34
-        area_h = _HEIGHT - area_y - 10
+        area_x, area_w = _PAD_X, _WIDTH - 2 * _PAD_X
+        area_y = _PAD_TOP
+        area_h = _HEIGHT - area_y - _PAD_BOTTOM
         cy = area_y + area_h / 2
-        amp_max = area_h / 2 * 0.85
+        amp_max = area_h / 2 * 0.95
         n = len(self._levels)
 
         grad_core = QLinearGradient(area_x, 0, area_x + area_w, 0)
@@ -338,12 +318,12 @@ class FloatingRecorderWidget(QWidget):
         spring's post-hit velocity ("impact energy") for a turbulent, still-
         settling surface right after a beat — decaying to smooth as it rests.
         """
-        area_x, area_w = 10, _WIDTH - 20
-        area_y = 34
-        area_h = _HEIGHT - area_y - 10
+        area_x, area_w = _PAD_X, _WIDTH - 2 * _PAD_X
+        area_y = _PAD_TOP
+        area_h = _HEIGHT - area_y - _PAD_BOTTOM
         cx = area_x + area_w / 2
         cy = area_y + area_h / 2
-        base_r = min(area_w, area_h) / 2 * 0.85
+        base_r = min(area_w, area_h) / 2 * 0.95
 
         latest = self._levels[-1]
         breathing = base_r * (0.7 + 0.3 * min(1.0, self._smoothed_level))
