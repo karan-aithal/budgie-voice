@@ -93,6 +93,55 @@ class TestXdotoolBackend:
 
             asyncio.run(_run())
 
+    def test_type_never_passes_window(self) -> None:
+        """--window switches xdotool to XSendEvent, which Electron/Firefox/GTK
+        apps silently reject (xdotool(1) SENDEVENT NOTES). Verified empirically:
+        a real GTK entry receives nothing via --window, and the text via XTEST.
+        """
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="99999\n")
+            from myna.injection.xdotool import XdotoolBackend  # noqa: PLC0415
+
+            backend = XdotoolBackend(delay_ms=0)
+
+            async def _run() -> None:
+                await backend.start_session(12345)
+                with patch("subprocess.run") as inner_run:
+                    inner_run.return_value = MagicMock(returncode=0, stderr=b"")
+                    await backend.commit_text("Hello world")
+
+                cmds = [c[0][0] for c in inner_run.call_args_list]
+                type_cmds = [c for c in cmds if "type" in c]
+                assert type_cmds, "expected an xdotool type call"
+                for cmd in type_cmds:
+                    assert "--window" not in cmd, f"--window would use XSendEvent: {cmd}"
+
+                # ...and the target must be focused first, or XTEST hits the wrong window
+                assert any("windowactivate" in c for c in cmds)
+                assert cmds.index(next(c for c in cmds if "windowactivate" in c)) < cmds.index(type_cmds[0])
+
+            asyncio.run(_run())
+
+    def test_activate_failure_still_types(self) -> None:
+        """A dead/unfocusable target must not block injection into current focus."""
+        with patch("subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="99999\n")
+            from myna.injection.xdotool import XdotoolBackend  # noqa: PLC0415
+
+            backend = XdotoolBackend(delay_ms=0)
+
+            async def _run() -> None:
+                await backend.start_session(12345)
+                with patch("subprocess.run") as inner_run:
+                    # windowactivate fails; type must still run
+                    inner_run.return_value = MagicMock(returncode=1, stderr=b"no such window")
+                    await backend.commit_text("Hello")
+
+                cmds = [c[0][0] for c in inner_run.call_args_list]
+                assert any("type" in c for c in cmds)
+
+            asyncio.run(_run())
+
     def test_sanitize_strips_control_chars(self) -> None:
         from myna.injection.xdotool import _sanitize  # noqa: PLC0415
 

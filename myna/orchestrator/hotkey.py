@@ -123,7 +123,7 @@ class HotkeyManager:
         match self._settings.mode:
             case "toggle":
                 self._pressed.clear()  # prevent repeat-fire while held
-                self._dispatch(self._service.toggle())
+                self._dispatch(self._service.toggle("pynput"))
             case "push_to_hold":
                 if not self._push_active:
                     self._push_active = True

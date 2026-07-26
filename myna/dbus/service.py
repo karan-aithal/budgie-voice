@@ -76,7 +76,7 @@ class MynaDBusService:
 
             @dbus.service.method(_INTERFACE)
             def Toggle(self) -> None:  # noqa: N802
-                asyncio.run_coroutine_threadsafe(service_ref.toggle(), loop_ref)
+                asyncio.run_coroutine_threadsafe(service_ref.toggle("dbus"), loop_ref)
 
             @dbus.service.method(_INTERFACE)
             def Reload(self) -> None:  # noqa: N802

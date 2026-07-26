@@ -20,8 +20,10 @@ def setup_logging(level: str = "INFO") -> None:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "myna.log"
 
+    # Milliseconds matter: duplicate-trigger and session-lifecycle bugs turn on
+    # sub-second gaps between events, which whole-second stamps hide entirely.
     fmt = logging.Formatter(
-        "%(asctime)s %(name)-28s %(levelname)-8s %(message)s",
+        "%(asctime)s.%(msecs)03d %(name)-28s %(levelname)-8s %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
     )
 

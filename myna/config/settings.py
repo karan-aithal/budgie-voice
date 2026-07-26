@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -20,6 +21,33 @@ class ActivationSettings:
 
     mode: Literal["toggle", "push_to_hold"] = "toggle"
     hotkey: str = "ctrl+space"
+
+    # Which mechanism owns the hotkey. Exactly one may own it: a single key
+    # press can otherwise reach DictationService.toggle() twice (pynput sees
+    # the combo AND a GNOME custom shortcut fires the DBus Toggle method),
+    # which starts a session and immediately stops it.
+    #   "pynput" — in-process global listener. X11 only; needs no desktop setup.
+    #   "dbus"   — external caller (GNOME custom shortcut) invokes Toggle.
+    #              The only option that works on native Wayland.
+    #   "auto"   — pick from the session type (see resolved_trigger).
+    trigger: Literal["auto", "pynput", "dbus"] = "auto"
+
+    # Window in which a second toggle from the *same* source is treated as a
+    # duplicate. Backstop for key auto-repeat and double-clicks; cross-source
+    # duplicates are handled by `trigger` above, not by timing. Load-dependent,
+    # so it stays a knob: raise it if repeats still slip through.
+    debounce_ms: int = 350
+
+    def resolved_trigger(self) -> Literal["pynput", "dbus"]:
+        """Resolve ``"auto"`` against the current session type.
+
+        pynput cannot observe global keys on native Wayland (the protocol has
+        no client-side global grab), so Wayland must be driven over DBus. X11
+        prefers pynput because it needs no desktop configuration.
+        """
+        if self.trigger != "auto":
+            return self.trigger  # type: ignore[return-value]
+        return "dbus" if os.environ.get("XDG_SESSION_TYPE") == "wayland" else "pynput"
 
 
 @dataclass

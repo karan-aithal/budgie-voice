@@ -100,6 +100,10 @@ class AudioAdapter:
         )
         _LOG.info("AudioAdapter closed")
 
+    def shutdown(self) -> None:
+        """Release the BT profile pin. Call once at app shutdown, not per-session."""
+        self._capture.release_bt()
+
     # ------------------------------------------------------------------
     # Streaming
     # ------------------------------------------------------------------

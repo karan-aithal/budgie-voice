@@ -201,7 +201,7 @@ async def main_async() -> None:
 
         log_path = Path.home() / ".local" / "share" / "myna" / "logs" / "myna.log"
         tray = TrayIcon(
-            on_toggle=dict_svc.toggle,
+            on_toggle=lambda: dict_svc.toggle("tray"),
             on_enroll=lambda: EnrollmentWizard(verifier).show(),
             on_settings=lambda: SettingsWindow(dict_svc._settings).show(),
             on_quit=stop_event.set,
@@ -239,8 +239,21 @@ async def main_async() -> None:
     # ------------------------------------------------------------------
     # Hotkey manager
     # ------------------------------------------------------------------
+    # Only start the in-process listener if it owns the hotkey. On Wayland it
+    # can't see global keys anyway, and running it alongside a GNOME shortcut
+    # that calls DBus Toggle double-fires every press.
+    trigger = settings.activation.resolved_trigger()
     hotkey = HotkeyManager(dict_svc, loop, settings.activation)
-    hotkey.start()
+    if trigger == "pynput":
+        hotkey.start()
+    else:
+        _LOG.info(
+            "Hotkey owned by %r (activation.trigger=%r, session=%s) — pynput listener not started; "
+            "bind %s to a desktop shortcut running: dbus-send --session --type=method_call "
+            "--dest=com.canonical.Myna /com/canonical/Myna com.canonical.Myna.Toggle",
+            trigger, settings.activation.trigger,
+            os.environ.get("XDG_SESSION_TYPE", "unknown"), settings.activation.hotkey,
+        )
 
     # ------------------------------------------------------------------
     # Signal handlers + run loop
@@ -263,6 +276,7 @@ async def main_async() -> None:
     finally:
         hotkey.stop()
         await dict_svc.stop()
+        adapter.shutdown()
         await client.disconnect()
         server.stop()
         dbus_svc.stop()

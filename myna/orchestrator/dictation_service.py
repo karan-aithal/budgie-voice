@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Callable
 
@@ -69,6 +70,7 @@ class DictationService:
         self._on_audio_level = on_audio_level
         self._on_preview = on_preview
         self._session = DictationSession()
+        self._last_toggle = 0.0
         self._send_task: asyncio.Task[None] | None = None
         self._recv_task: asyncio.Task[None] | None = None
         self._pending: list[TranscriptSegment] = []
@@ -101,8 +103,45 @@ class DictationService:
     # Hotkey callbacks (called thread-safely via run_coroutine_threadsafe)
     # ------------------------------------------------------------------
 
-    async def toggle(self) -> None:
-        """Toggle: start if IDLE, stop otherwise."""
+    async def toggle(self, source: str = "?") -> None:
+        """Toggle: start if IDLE, stop otherwise.
+
+        One physical key press can reach here twice — on X11 the pynput listener
+        sees the combo *and* a GNOME custom shortcut fires the DBus ``Toggle``
+        method — which would start a session and immediately stop it. Only the
+        source named by ``activation.trigger`` is allowed to drive the hotkey;
+        the other is dropped no matter how far apart the two land. Timing alone
+        can't fix this: the observed gap between the two exceeded any window
+        short enough to still permit a deliberate quick stop.
+
+        Args:
+            source: Which trigger fired — ``"pynput"``, ``"dbus"``, or ``"tray"``.
+                The first two match ``activation.trigger`` values deliberately, so
+                ownership is a direct comparison. ``"tray"`` is an explicit click
+                and is always allowed.
+        """
+        owner = self._settings.activation.resolved_trigger()
+        if source in ("pynput", "dbus") and source != owner:
+            _LOG.info(
+                "Toggle from %r ignored — activation.trigger gives the hotkey to %r",
+                source, owner,
+            )
+            return
+
+        # Same-source backstop: key auto-repeat, tray double-click.
+        now = time.monotonic()
+        elapsed_ms = (now - self._last_toggle) * 1000.0
+        if elapsed_ms < self._settings.activation.debounce_ms:
+            _LOG.info(
+                "Toggle from %r ignored — repeat %.0f ms after last (debounce %d ms)",
+                source, elapsed_ms, self._settings.activation.debounce_ms,
+            )
+            return
+        # Stamped before the first await: this is what makes a second toggle
+        # arriving mid-start bail out instead of racing the session open.
+        self._last_toggle = now
+        _LOG.info("Toggle from %r accepted (state=%s)", source, self._session.state)
+
         if self._session.state == SessionState.IDLE:
             await self._start_session()
         else:

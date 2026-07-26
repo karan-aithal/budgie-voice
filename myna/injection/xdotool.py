@@ -1,14 +1,22 @@
 """XdotoolBackend — X11 text injection via xdotool.
 
-The target window ID is locked at :meth:`start_session`; all subsequent
-``commit_text`` calls use ``--window <id>`` so the wrong window is never
-targeted even if focus changes during transcription.
+The target window ID is locked at :meth:`start_session`, then *activated*
+immediately before typing so keystrokes land in it even if focus moved during
+transcription.
+
+Deliberately does NOT pass ``--window`` to ``xdotool type``. Per xdotool(1)
+"SENDEVENT NOTES", ``--window`` switches xdotool from XTEST to ``XSendEvent``,
+and X11 marks those events with a synthetic flag that "many programs observe
+and reject" — Electron (VS Code), Firefox, Chrome and most GTK apps drop them
+silently, so the text vanishes with no error. Activating the window first and
+typing via XTEST is the only approach that works across toolkits.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
 import subprocess
+import time
 import unicodedata
 
 from myna.injection.base import TextOutputBackend
@@ -16,6 +24,9 @@ from myna.injection.secure import SecureFieldDetector
 from myna.utils.exceptions import MynaInjectionError
 
 _LOG = logging.getLogger(__name__)
+
+# Settle time after the WM reports the target window active, before typing.
+_FOCUS_SETTLE_S = 0.05
 
 
 def _check_xdotool() -> None:
@@ -107,6 +118,7 @@ class XdotoolBackend(TextOutputBackend):
     # ------------------------------------------------------------------
 
     def _inject_sync(self, text: str) -> None:
+        self._activate_target()
         parts = text.split("\n")
         for idx, part in enumerate(parts):
             if part:
@@ -114,21 +126,54 @@ class XdotoolBackend(TextOutputBackend):
             if idx < len(parts) - 1:
                 self._press_key("Return")
 
+    def _activate_target(self) -> None:
+        """Give the locked target window X input focus before typing.
+
+        Required because we type via XTEST (see module docstring), and XTEST
+        delivers to whatever currently holds focus — which by injection time may
+        be the recording overlay or whatever the user clicked. ``--sync`` waits
+        for the window to actually become active rather than racing it.
+
+        Best-effort: if the window is gone or refuses focus we still type, since
+        the current focus is usually the right place anyway.
+        """
+        if self._window_id is None:
+            return
+        try:
+            result = subprocess.run(
+                ["xdotool", "windowactivate", "--sync", str(self._window_id)],
+                check=False, capture_output=True, timeout=5,
+            )
+            if result.returncode != 0:
+                _LOG.warning(
+                    "windowactivate %s failed (%s) — typing into current focus",
+                    self._window_id,
+                    result.stderr.decode("utf-8", "replace").strip(),
+                )
+                return
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            _LOG.warning("windowactivate failed (%s) — typing into current focus", exc)
+            return
+        # --sync returns once the WM reports the window active, but toolkits
+        # still need a moment to move the caret into the focused widget; without
+        # this the first characters are occasionally dropped. Real-world timing
+        # knob, not a magic number — raise it if leading characters go missing.
+        time.sleep(_FOCUS_SETTLE_S)
+
     def _type_segment(self, text: str) -> None:
-        cmd = ["xdotool", "type"]
-        if self._window_id is not None:
-            cmd += ["--window", str(self._window_id)]
-        cmd += ["--clearmodifiers", "--delay", str(self._delay_ms), "--", text]
+        # No --window: that would switch xdotool to XSendEvent, which most
+        # toolkits reject. See module docstring.
+        cmd = [
+            "xdotool", "type", "--clearmodifiers",
+            "--delay", str(self._delay_ms), "--", text,
+        ]
         try:
             subprocess.run(cmd, check=False, capture_output=True, timeout=10)
         except (OSError, subprocess.TimeoutExpired) as exc:
             raise MynaInjectionError(f"xdotool type failed: {exc}") from exc
 
     def _press_key(self, key: str) -> None:
-        cmd = ["xdotool", "key"]
-        if self._window_id is not None:
-            cmd += ["--window", str(self._window_id)]
-        cmd += ["--clearmodifiers", key]
+        cmd = ["xdotool", "key", "--clearmodifiers", key]
         try:
             subprocess.run(cmd, check=False, capture_output=True, timeout=5)
         except (OSError, subprocess.TimeoutExpired) as exc:

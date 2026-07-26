@@ -1,8 +1,12 @@
 
-Issue 1:
+FUTURE SCOPE:
 4. Screen-context AI (reads screen content to adapt) — needs OCR/accessibility API integration, LLM call per dictation. Big scope, conflicts with your minimalist/local-only design.
 https://github.com/Beingpax/VoiceInk
 5. Smart Modes (AI rewrite styles) + conversational assistant mode — needs an LLM in the loop (your master prompt only lists "future: local LLM" for finalization, nothing conversational). Real feature, real scope, not a quick add.
+6. Adjustable speaker verifivation threshold
+
+7. Cosmetic -- edges of wavform visualizer seems snapped, create extending line dimensihes off at edges where visualizer intensity also dimenises slowly at edges
+
 
 Cheapest real win: #1 (manual dictionary). Say go and I build it.
 
