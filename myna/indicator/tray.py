@@ -1,7 +1,6 @@
-"""TrayIcon — QSystemTrayIcon with emoji-rendered state icons.
+"""TrayIcon — QSystemTrayIcon with colored-mic state icons.
 
-Icons are 32×32 QPixmaps rendered from emoji via QPainter — zero external
-image files required.
+Icons are SVG files under ``icons/``, one per state color.
 
 ``LOW_CONFIDENCE`` auto-reverts to the prior state after 3 s via QTimer.
 ``COMPLETED`` flashes green for 2 s then reverts to IDLE.
@@ -15,10 +14,12 @@ from pathlib import Path
 from typing import Callable
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
 _LOG = logging.getLogger(__name__)
+
+_ICONS_DIR = Path(__file__).parent / "icons"
 
 
 class TrayState(StrEnum):
@@ -35,35 +36,22 @@ class TrayState(StrEnum):
     ERROR = "error"
 
 
-# emoji, tooltip
+# icon color, tooltip
 _STATE_CONFIG: dict[TrayState, tuple[str, str]] = {
-    TrayState.IDLE:           ("🔵", "Myna — idle"),
-    TrayState.STARTING:       ("🟡", "Myna — starting…"),
-    TrayState.RECORDING:      ("🟢", "Myna — recording"),
-    TrayState.TRANSCRIBING:   ("🟣", "Myna — transcribing"),
-    TrayState.FINALIZING:     ("🟣", "Myna — finalizing"),
-    TrayState.COMPLETED:      ("🟢", "Myna — done"),
-    TrayState.LOW_CONFIDENCE: ("🟠", "Myna — couldn't hear clearly"),
-    TrayState.CANCELLED:      ("🔵", "Myna — cancelled"),
-    TrayState.ERROR:          ("🔴", "Myna — error (see log)"),
+    TrayState.IDLE:           ("blue", "Myna — idle"),
+    TrayState.STARTING:       ("yellow", "Myna — starting…"),
+    TrayState.RECORDING:      ("green", "Myna — recording"),
+    TrayState.TRANSCRIBING:   ("purple", "Myna — transcribing"),
+    TrayState.FINALIZING:     ("purple", "Myna — finalizing"),
+    TrayState.COMPLETED:      ("green", "Myna — done"),
+    TrayState.LOW_CONFIDENCE: ("orange", "Myna — couldn't hear clearly"),
+    TrayState.CANCELLED:      ("blue", "Myna — cancelled"),
+    TrayState.ERROR:          ("red", "Myna — error (see log)"),
 }
 
 
-def _emoji_pixmap(emoji: str, size: int = 32) -> QPixmap:
-    """Render *emoji* into a square QPixmap via QPainter."""
-    px = QPixmap(size, size)
-    px.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(px)
-    font = QFont()
-    font.setPointSize(20)
-    painter.setFont(font)
-    painter.drawText(px.rect(), Qt.AlignmentFlag.AlignCenter, emoji)
-    painter.end()
-    return px
-
-
 class TrayIcon(QSystemTrayIcon):
-    """System tray icon with state-driven emoji icons and context menu.
+    """System tray icon with state-driven colored-mic icons and context menu.
 
     Args:
         on_toggle: Coroutine factory called when "Toggle Listen" is clicked.
@@ -126,8 +114,8 @@ class TrayIcon(QSystemTrayIcon):
     # ------------------------------------------------------------------
 
     def _update_icon(self, state: TrayState) -> None:
-        emoji, tooltip = _STATE_CONFIG.get(state, ("⚫", "Myna"))
-        self.setIcon(QIcon(_emoji_pixmap(emoji)))  # type: ignore[call-arg]
+        color, tooltip = _STATE_CONFIG.get(state, ("blue", "Myna"))
+        self.setIcon(QIcon(str(_ICONS_DIR / f"{color}.svg")))  # type: ignore[call-arg]
         self.setToolTip(tooltip)
 
     def _build_menu(
