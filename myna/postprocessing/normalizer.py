@@ -119,8 +119,15 @@ def _replace_cardinals(text: str, w2n: object) -> str:
             i += 1
             continue
 
+        # word2number silently ignores trailing non-number words in a span
+        # (e.g. "twenty two items" -> 22), so cap the span to the run of
+        # actual number words to avoid swallowing following text.
+        run_len = 0
+        while i + run_len < len(tokens) and tokens[i + run_len].lower() in _NUMBER_WORDS:
+            run_len += 1
+
         converted = False
-        for length in range(min(8, len(tokens) - i), 0, -1):
+        for length in range(min(8, run_len), 0, -1):
             span = " ".join(tokens[i : i + length])
             try:
                 num = w2n.word_to_num(span)  # type: ignore[union-attr]

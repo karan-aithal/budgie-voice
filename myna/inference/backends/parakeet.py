@@ -21,7 +21,6 @@ import numpy as np
 
 from myna.inference.backends.base import BackendCapabilities, InferenceBackend
 from myna.inference.protocol import TranscriptSegment
-from myna.utils.exceptions import MynaInferenceError
 
 _LOG = logging.getLogger(__name__)
 
@@ -71,7 +70,7 @@ class ParakeetBackend(InferenceBackend):
                 for faster-whisper under the shared interface.
 
         Raises:
-            MynaInferenceError: Model download or initialisation fails.
+            RuntimeError: Model download or initialisation fails.
         """
         self._model_name = model
         loop = asyncio.get_running_loop()
@@ -91,7 +90,7 @@ class ParakeetBackend(InferenceBackend):
         same contract as :class:`~myna.inference.backends.faster_whisper.FasterWhisperBackend`.
         """
         if self._model is None:
-            raise MynaInferenceError("ParakeetBackend: call load() first")
+            raise RuntimeError("ParakeetBackend: call load() first")
 
         buffer: list[np.ndarray] = []
         async for frame in audio_frames:
@@ -130,7 +129,7 @@ class ParakeetBackend(InferenceBackend):
         try:
             self._model = onnx_asr.load_model(model, quantization=quantization)
         except Exception as exc:
-            raise MynaInferenceError(f"Failed to load Parakeet model '{model}': {exc}") from exc
+            raise RuntimeError(f"Failed to load Parakeet model '{model}': {exc}") from exc
 
     def _transcribe_sync(self, audio: np.ndarray, language: str) -> TranscriptSegment | None:
         text: str = self._model.recognize(audio, sample_rate=16_000)  # type: ignore[union-attr]

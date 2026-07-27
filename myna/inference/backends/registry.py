@@ -11,8 +11,6 @@ from myna.inference.backends.parakeet import ParakeetBackend
 _REGISTRY: dict[str, type[InferenceBackend]] = {
     "faster_whisper": FasterWhisperBackend,
     "parakeet": ParakeetBackend,
-    # "nemotron":     NemotronBackend,    # future
-    # "qwen3_asr":    Qwen3AsrBackend,    # future
 }
 
 

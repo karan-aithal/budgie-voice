@@ -52,11 +52,12 @@ def test_transcript_segment_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_faster_whisper_capabilities() -> None:
+    from myna.inference.backends.base import INTERFACE_VERSION  # noqa: PLC0415
     from myna.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
 
     backend = FasterWhisperBackend()
     caps = await backend.capabilities()
-    assert caps.version == "1.0"
+    assert caps.version == INTERFACE_VERSION
     assert "small" in caps.supported_models
     assert "en" in caps.supported_languages
     assert caps.supports_streaming is True
@@ -72,7 +73,6 @@ def test_faster_whisper_not_ready_before_load() -> None:
 @pytest.mark.asyncio
 async def test_faster_whisper_transcribe_empty_yields_nothing() -> None:
     from myna.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
-    from myna.utils.exceptions import MynaInferenceError  # noqa: PLC0415
 
     backend = FasterWhisperBackend()
 
@@ -80,7 +80,7 @@ async def test_faster_whisper_transcribe_empty_yields_nothing() -> None:
         return
         yield  # make it an async generator
 
-    with pytest.raises(MynaInferenceError):
+    with pytest.raises(RuntimeError):
         async for _ in backend.transcribe_stream(_empty(), "en"):
             pass
 

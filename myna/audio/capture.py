@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 import sounddevice as sd
 
-from myna.utils.exceptions import MynaMicError
 
 if TYPE_CHECKING:
     from myna.config.settings import AudioSettings
@@ -141,7 +140,7 @@ class AudioCapture:
         """Open sounddevice InputStream and begin capture.
 
         Raises:
-            MynaMicError: PortAudio fails to open the device.
+            RuntimeError: PortAudio fails to open the device.
         """
         device_cfg = self._settings.device
         sd_device: str | int | None
@@ -199,7 +198,7 @@ class AudioCapture:
                 device_cfg,
             )
         except sd.PortAudioError as exc:
-            raise MynaMicError(f"Failed to open microphone: {exc}") from exc
+            raise RuntimeError(f"Failed to open microphone: {exc}") from exc
 
     def stop(self) -> None:
         """Stop the microphone stream. Leaves the BT profile pinned (see

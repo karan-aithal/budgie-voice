@@ -1,33 +1,13 @@
-"""Custom exceptions for Myna."""
+"""Custom exceptions for Myna.
+
+Only types with a distinct ``except`` handler elsewhere get their own class;
+everything else raises stdlib ``RuntimeError``/``ValueError``.
+"""
 
 
-class MynaError(Exception):
-    """Base Myna exception."""
+class MynaInjectionError(Exception):
+    """Text injection failure — caught in injection/selector.py to trigger fallback."""
 
 
-class MynaMicError(MynaError):
-    """Microphone unavailable or capture failure."""
-
-
-class MynaInferenceError(MynaError):
-    """Inference server/backend failure."""
-
-
-class MynaInjectionError(MynaError):
-    """Text injection failure."""
-
-
-class MynaConfigError(MynaError):
-    """Configuration load/validation failure."""
-
-
-class MynaDBusError(MynaError):
-    """DBus communication failure."""
-
-
-class MynaSpeakerError(MynaError):
-    """Speaker verification failure."""
-
-
-class MynaSessionError(MynaError):
-    """Session state-machine violation."""
+class MynaSessionError(Exception):
+    """Session state-machine violation — caught in orchestrator/dictation_service.py."""

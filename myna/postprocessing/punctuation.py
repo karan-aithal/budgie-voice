@@ -106,16 +106,20 @@ class PunctuationProcessor:
         if not self._enabled:
             return text
 
-        # Pass 1 — safe (unambiguous) commands, longest first
+        # Pass 1 — phrase-boundary "period" / "full stop". Must run before the
+        # safe-command pass: its lookahead matches literal command words (e.g.
+        # "new line"), which pass 2 below rewrites into symbols.
+        text = _PERIOD_PAT.sub(".", text)
+
+        # Pass 2 — safe (unambiguous) commands, longest first
         for pat, repl in _SAFE_SUBS:
             text = pat.sub(repl, text)
-
-        # Pass 2 — phrase-boundary "period" / "full stop"
-        text = _PERIOD_PAT.sub(".", text)
 
         # Tidy spacing
         text = _SPACE_BEFORE_PUNCT.sub(r"\1", text)
         text = _SPACE_AROUND_NL.sub("\n", text)
         text = _MULTI_SPACE.sub(" ", text)
 
-        return text.strip()
+        # strip() (not full strip) — trailing "\n" from "new line"/"new
+        # paragraph" is a meaningful command result, not incidental whitespace.
+        return text.strip(" ")

@@ -16,7 +16,6 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from myna.utils.exceptions import MynaSpeakerError
 
 _LOG = logging.getLogger(__name__)
 
@@ -66,7 +65,7 @@ class SpeakerVerifier:
             )
             _LOG.info("SpeakerVerifier model loaded")
         except Exception as exc:
-            raise MynaSpeakerError(f"Failed to load speaker model: {exc}") from exc
+            raise RuntimeError(f"Failed to load speaker model: {exc}") from exc
 
     def load(self) -> None:
         """Load model and voiceprint.  Call once at startup (blocking)."""
@@ -82,7 +81,7 @@ class SpeakerVerifier:
             self._voiceprint = vp_tensor.numpy()
             _LOG.info("SpeakerVerifier loaded (threshold=%.2f)", self._threshold)
         except Exception as exc:
-            raise MynaSpeakerError(f"Failed to load speaker model: {exc}") from exc
+            raise RuntimeError(f"Failed to load speaker model: {exc}") from exc
 
     # ------------------------------------------------------------------
     # Verification
@@ -98,10 +97,10 @@ class SpeakerVerifier:
             1-D float32 normalised embedding vector.
 
         Raises:
-            MynaSpeakerError: Model not loaded.
+            RuntimeError: Model not loaded.
         """
         if self._model is None:
-            raise MynaSpeakerError("SpeakerVerifier not loaded")
+            raise RuntimeError("SpeakerVerifier not loaded")
 
         tensor = torch.tensor(audio, dtype=torch.float32).unsqueeze(0)
         with torch.no_grad():

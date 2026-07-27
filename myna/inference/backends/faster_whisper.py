@@ -11,7 +11,6 @@ import numpy as np
 
 from myna.inference.backends.base import BackendCapabilities, InferenceBackend
 from myna.inference.protocol import TranscriptSegment
-from myna.utils.exceptions import MynaInferenceError
 
 _LOG = logging.getLogger(__name__)
 
@@ -59,7 +58,7 @@ class FasterWhisperBackend(InferenceBackend):
             beam_size: Beam width for decoding (higher = more accurate, slower).
 
         Raises:
-            MynaInferenceError: Model download or initialisation fails.
+            RuntimeError: Model download or initialisation fails.
         """
         self._model_name = model
         self._beam_size = beam_size
@@ -86,10 +85,10 @@ class FasterWhisperBackend(InferenceBackend):
             Final :class:`~myna.inference.protocol.TranscriptSegment` per sentence.
 
         Raises:
-            MynaInferenceError: Model not loaded or transcription fails.
+            RuntimeError: Model not loaded or transcription fails.
         """
         if self._model is None:
-            raise MynaInferenceError("FasterWhisperBackend: call load() first")
+            raise RuntimeError("FasterWhisperBackend: call load() first")
 
         buffer: list[np.ndarray] = []
         async for frame in audio_frames:
@@ -146,7 +145,7 @@ class FasterWhisperBackend(InferenceBackend):
                 download_root=str(cache),
             )
         except Exception as exc:
-            raise MynaInferenceError(f"Failed to load WhisperModel '{model}': {exc}") from exc
+            raise RuntimeError(f"Failed to load WhisperModel '{model}': {exc}") from exc
 
     def _transcribe_sync(
         self, audio: np.ndarray, language: str, hotwords: str | None = None

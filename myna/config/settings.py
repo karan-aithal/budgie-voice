@@ -9,7 +9,6 @@ from typing import Literal
 
 import yaml
 
-from myna.utils.exceptions import MynaConfigError
 
 _LOG = logging.getLogger(__name__)
 _DEFAULT_CONFIG = Path.home() / ".config" / "myna" / "config.yaml"
@@ -142,8 +141,6 @@ class LoggingSettings:
     """Logging configuration."""
 
     level: str = "INFO"
-    max_bytes: int = 5_242_880
-    backup_count: int = 3
 
 
 @dataclass
@@ -195,7 +192,7 @@ def load_settings(path: Path | None = None) -> Settings:
         Populated Settings dataclass.
 
     Raises:
-        MynaConfigError: File exists but fails YAML parsing.
+        ValueError: File exists but fails YAML parsing.
     """
     cfg_path = path or _DEFAULT_CONFIG
     settings = Settings()
@@ -210,6 +207,6 @@ def load_settings(path: Path | None = None) -> Settings:
         _merge(settings, data)
         _LOG.info("Config loaded from %s", cfg_path)
     except yaml.YAMLError as exc:
-        raise MynaConfigError(f"Failed to parse {cfg_path}: {exc}") from exc
+        raise ValueError(f"Failed to parse {cfg_path}: {exc}") from exc
 
     return settings

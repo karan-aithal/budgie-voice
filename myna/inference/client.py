@@ -12,7 +12,6 @@ from typing import AsyncIterator
 from websockets.asyncio.client import connect as _ws_connect
 
 from myna.inference.protocol import AudioFrame, TranscriptSegment
-from myna.utils.exceptions import MynaInferenceError
 
 _LOG = logging.getLogger(__name__)
 
@@ -46,14 +45,14 @@ class InferenceClient:
             language: Default BCP-47 language tag sent with each frame.
 
         Raises:
-            MynaInferenceError: Connection fails.
+            RuntimeError: Connection fails.
         """
         self._language = language
         try:
             self._ws = await _ws_connect(self._ws_url)
             _LOG.info("InferenceClient connected → %s", self._ws_url)
         except Exception as exc:
-            raise MynaInferenceError(f"Cannot connect to inference server: {exc}") from exc
+            raise RuntimeError(f"Cannot connect to inference server: {exc}") from exc
 
     async def disconnect(self) -> None:
         """Close the WebSocket Data Channel."""
@@ -73,10 +72,10 @@ class InferenceClient:
             frame: Audio chunk to transmit.
 
         Raises:
-            MynaInferenceError: Not connected.
+            RuntimeError: Not connected.
         """
         if self._ws is None:
-            raise MynaInferenceError("InferenceClient: not connected — call connect() first")
+            raise RuntimeError("InferenceClient: not connected — call connect() first")
 
         msg = {
             "type": "audio_frame",
@@ -98,10 +97,10 @@ class InferenceClient:
             One :class:`~myna.inference.protocol.TranscriptSegment` per committed segment.
 
         Raises:
-            MynaInferenceError: Not connected.
+            RuntimeError: Not connected.
         """
         if self._ws is None:
-            raise MynaInferenceError("InferenceClient: not connected")
+            raise RuntimeError("InferenceClient: not connected")
 
         async for raw in self._ws:  # type: ignore[union-attr]
             try:

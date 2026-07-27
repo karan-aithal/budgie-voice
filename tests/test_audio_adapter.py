@@ -50,9 +50,25 @@ def test_vad_process_passthrough() -> None:
     assert is_end is False
 
 
+class _FakeScore:
+    def __init__(self, value: float) -> None:
+        self._value = value
+
+    def item(self) -> float:
+        return self._value
+
+
+class _FakeSileroModel:
+    """Scores by amplitude — non-zero chunk is "speech", zero chunk is silence."""
+
+    def __call__(self, tensor, sample_rate) -> _FakeScore:  # noqa: ANN001
+        return _FakeScore(1.0 if float(tensor.abs().sum()) > 0 else 0.0)
+
+
 def test_vad_pad_expiry() -> None:
     """Silence after speech triggers end-of-speech once pad expires."""
     vad = VADFilter(aggressiveness=2, speech_pad_ms=60, sample_rate=16_000)
+    vad._model = _FakeSileroModel()  # noqa: SLF001 — drive the state machine without a real model
     # pad_samples = 16000 * 60 / 1000 = 960
 
     speech = np.ones(512, dtype=np.float32)
