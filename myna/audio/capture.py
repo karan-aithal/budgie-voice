@@ -113,6 +113,42 @@ def _restore_bt_profile(card: str, original: str | None) -> None:
     _LOG.warning("Could not restore BT profile for %s", card)
 
 
+def _source_names() -> list[str]:
+    """Names of all Pulse/PipeWire sources, [] if pactl is unavailable."""
+    try:
+        out = subprocess.check_output(
+            ["pactl", "list", "short", "sources"], timeout=5, text=True, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        return []
+    return [p[1] for p in (line.split("\t") for line in out.splitlines()) if len(p) > 1]
+
+
+# Sources Auto never picks: monitors record playback, snd_aloop is a loopback,
+# iec958 is a digital input, bluez is opt-in (a BT mic drags playback to mSBC).
+_AUTO_SKIP = (".monitor", "snd_aloop", "iec958", "bluez")
+
+
+def _auto_source() -> str | None:
+    """First real microphone source, or None (= system default)."""
+    for name in _source_names():
+        if not any(skip in name.lower() for skip in _AUTO_SKIP):
+            return name
+    return None
+
+
+def _set_source_gain(source: str, pct: int) -> None:
+    pct = max(50, min(150, pct))
+    try:
+        subprocess.run(
+            ["pactl", "set-source-volume", source, f"{pct}%"],
+            check=True, timeout=5, capture_output=True,
+        )
+        _LOG.info("BT mic gain set to %d%% on %s", pct, source)
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("Could not set mic gain on %s: %s", source, exc)
+
+
 class AudioCapture:
     """Captures raw mono PCM audio from microphone into an asyncio Queue.
 
@@ -133,61 +169,56 @@ class AudioCapture:
         self._bt_card: str | None = None       # set while a session holds the BT card in headset mode
         self._bt_restore_profile: str | None = None
         self._prev_default_source: str | None = None
+        self._env_pinned = False               # True while we own PULSE_SOURCE
+        self.source_label = "system default"    # what the current session records from
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
     def start(self) -> None:
-        """Open sounddevice InputStream and begin capture.
+        """Open the first working microphone from ``audio.devices`` (or Auto).
+
+        Resolved at every session start, so a headset that was off last time or a
+        source that went away is simply skipped.
 
         Raises:
-            RuntimeError: PortAudio fails to open the device.
+            RuntimeError: No entry could be opened.
         """
         # Chunks captured after the previous session's consumer stopped belong
         # to that session — never hand them to this one.
         while not self._queue.empty():
             self._queue.get_nowait()
 
-        device_cfg = self._settings.device
-        sd_device: str | int | None
+        entries: list[str | None] = list(self._settings.device_list())
+        if not entries:
+            auto = _auto_source()
+            entries = [f"pa:{auto}" if auto else None]  # None = system default
 
-        if isinstance(device_cfg, str) and device_cfg.startswith("bt:"):
-            card = device_cfg[3:]
-            self._bt_card = card
-            # A BT headset has one link: A2DP (high-quality playback, no mic) or
-            # HSP/HFP (mic, narrowband playback). The system flips back to A2DP
-            # on its own mid-session unless the profile *and* the mic source are
-            # both pinned, so do it every session and give the link back in stop().
-            self._bt_restore_profile = _get_active_profile(card)
-            for profile in ("headset-head-unit-msbc", "headset-head-unit"):
-                try:
-                    subprocess.run(
-                        ["pactl", "set-card-profile", card, profile],
-                        check=True, timeout=5, capture_output=True,
-                    )
-                    _LOG.info("BT profile switched for capture: %s → %s", card, profile)
-                    break
-                except subprocess.CalledProcessError as exc:
-                    _LOG.warning("BT profile %s failed: %s", profile, exc.stderr.decode(errors="replace").strip())
-            src, self._prev_default_source = _set_bt_default_source(card)
-            if not src:
-                self.release_bt()
-                raise RuntimeError(f"Headset mic not available (card {card} stayed on a playback profile)")
-            os.environ["PULSE_SOURCE"] = src  # pin our stream to the BT mic
-            sd_device = "pulse"
-        elif isinstance(device_cfg, str) and device_cfg.startswith("pa:"):
-            source = device_cfg[3:]
+        failures: list[str] = []
+        for entry in entries:
             try:
-                subprocess.run(
-                    ["pactl", "set-default-source", source],
-                    check=True, timeout=5, capture_output=True,
-                )
-            except Exception as e:
-                _LOG.warning("pactl set-default-source failed: %s", e)
+                self._open(entry)
+                return
+            except RuntimeError as exc:
+                self.release_bt()
+                failures.append(f"{entry or 'system default'}: {exc}")
+                _LOG.warning("Mic %s unavailable: %s", entry or "system default", exc)
+        raise RuntimeError("No microphone available — " + "; ".join(failures))
+
+    def _open(self, entry: str | None) -> None:
+        sd_device: str | None
+        if entry is not None and entry.startswith("bt:"):
+            sd_device = self._pin_bt(entry[3:])
+        elif entry is not None and entry.startswith("pa:"):
+            source = entry[3:]
+            if source not in _source_names():
+                raise RuntimeError(f"source {source} not found")
+            os.environ["PULSE_SOURCE"] = source  # per stream; the system default stays untouched
+            self._env_pinned = True
             sd_device = "pulse"
         else:
-            sd_device = device_cfg  # type: ignore[assignment]
+            sd_device = entry  # ALSA name, or None = PortAudio default
 
         try:
             self._stream = sd.InputStream(
@@ -199,14 +230,41 @@ class AudioCapture:
                 callback=self._callback,
             )
             self._stream.start()
-            _LOG.info(
-                "Mic capture started — %d Hz, %d ms chunks, device=%r",
-                self._settings.sample_rate,
-                self._settings.chunk_duration_ms,
-                device_cfg,
-            )
         except sd.PortAudioError as exc:
+            self._stream = None
             raise RuntimeError(f"Failed to open microphone: {exc}") from exc
+        self.source_label = entry or "system default"
+        _LOG.info(
+            "Mic capture started — %d Hz, %d ms chunks, device=%r",
+            self._settings.sample_rate, self._settings.chunk_duration_ms, self.source_label,
+        )
+
+    def _pin_bt(self, card: str) -> str:
+        """Put a BT headset in its mic profile and pin its mic source; returns the sd device."""
+        self._bt_card = card
+        # A BT headset has one link: A2DP (high-quality playback, no mic) or
+        # HSP/HFP (mic, narrowband playback). The system flips back to A2DP
+        # on its own mid-session unless the profile *and* the mic source are
+        # both pinned, so do it every session and give the link back in stop().
+        self._bt_restore_profile = _get_active_profile(card)
+        for profile in ("headset-head-unit-msbc", "headset-head-unit"):
+            try:
+                subprocess.run(
+                    ["pactl", "set-card-profile", card, profile],
+                    check=True, timeout=5, capture_output=True,
+                )
+                _LOG.info("BT profile switched for capture: %s → %s", card, profile)
+                break
+            except subprocess.CalledProcessError as exc:
+                _LOG.warning("BT profile %s failed: %s", profile, exc.stderr.decode(errors="replace").strip())
+        src, self._prev_default_source = _set_bt_default_source(card)
+        if not src:
+            raise RuntimeError(f"headset mic not available (card {card} stayed on a playback profile)")
+        os.environ["PULSE_SOURCE"] = src  # pin our stream to the BT mic
+        self._env_pinned = True
+        if self._settings.input_gain_pct is not None:
+            _set_source_gain(src, self._settings.input_gain_pct)
+        return "pulse"
 
     def stop(self) -> None:
         """Stop the microphone stream and hand a BT headset back to playback quality."""
@@ -218,10 +276,12 @@ class AudioCapture:
         self.release_bt()
 
     def release_bt(self) -> None:
-        """Restore the BT card's playback profile and default source. No-op when
-        no session holds the card, so safe to call again at shutdown."""
-        if self._bt_card:
+        """Undo what start() pinned: PULSE_SOURCE, and a BT card's playback profile
+        and default source. No-op when nothing is held, so safe to call twice."""
+        if self._env_pinned:
             os.environ.pop("PULSE_SOURCE", None)
+            self._env_pinned = False
+        if self._bt_card:
             _restore_bt_profile(self._bt_card, self._bt_restore_profile)
             _restore_default_source(self._prev_default_source)
             self._bt_card = None

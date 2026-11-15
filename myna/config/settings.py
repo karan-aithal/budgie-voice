@@ -53,11 +53,23 @@ class ActivationSettings:
 class AudioSettings:
     """Audio capture configuration."""
 
-    device: str | None = None
+    # Ordered preference list; the first entry that works at session start wins.
+    # Entries: "bt:<card>" | "pa:<source>" | an ALSA device name. Empty = Auto
+    # (first real mic that is not a monitor/loopback/digital/Bluetooth source,
+    # else the system default).
+    devices: list[str] = field(default_factory=list)
+    device: str | None = None  # legacy single entry; read via device_list()
     sample_rate: int = 16000
     chunk_duration_ms: int = 30
     format: Literal["pcm16", "float32"] = "pcm16"
     denoise: bool = True
+    # Bluetooth mic gain, applied when a "bt:" device is pinned. None = leave alone.
+    # Clamped to 50-150: 150 clipped hard on the Nord Buds 3 Pro.
+    input_gain_pct: int | None = None
+
+    def device_list(self) -> list[str]:
+        """Preference list, honouring the legacy single ``device`` key."""
+        return list(self.devices) or ([self.device] if self.device else [])
 
 
 @dataclass
@@ -67,6 +79,9 @@ class VadSettings:
     enabled: bool = True
     aggressiveness: int = 2
     speech_pad_ms: int = 300
+    # Audio kept from before the first speech chunk of a turn, so soft word
+    # onsets ("fifteen", "should") are not clipped.
+    pre_roll_ms: int = 300
 
 
 @dataclass

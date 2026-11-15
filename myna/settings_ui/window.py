@@ -196,12 +196,12 @@ class SettingsWindow(QDialog):
         target = (
             self._mic_combo.currentData()
             if self._mic_combo.count() > 0
-            else self._settings.audio.device
+            else next(iter(self._settings.audio.device_list()), None)
         )
         self._mic_combo.clear()
         self._mic_device_values = []
 
-        self._mic_combo.addItem("System default", None)
+        self._mic_combo.addItem("Auto (built-in mic first)", None)
         self._mic_device_values.append(None)
 
         # --- BT cards via pactl (shows even when in A2DP / no active source) ---
@@ -329,6 +329,13 @@ class SettingsWindow(QDialog):
         fl.addRow("Visualizer:", self._visualizer_combo)
         return box
 
+    def _mic_devices(self) -> list[str]:
+        """Selected mic first; fallbacks already in the config are kept behind it."""
+        chosen = self._mic_combo.currentData()
+        if chosen is None:
+            return []  # Auto
+        return [chosen] + [d for d in self._settings.audio.device_list() if d != chosen]
+
     def _save(self) -> None:
         # Merge into whatever's already on disk instead of overwriting wholesale —
         # config.yaml can carry hand-tuned keys this dialog doesn't expose
@@ -344,7 +351,7 @@ class SettingsWindow(QDialog):
                 "hotkey": self._hotkey_edit.text(),
                 "mode": "toggle" if self._mode_toggle.isChecked() else "push_to_hold",
             },
-            "audio": {"device": self._mic_combo.currentData()},
+            "audio": {"devices": self._mic_devices()},
             "inference": {
                 "model": self._model_combo.currentText(),
                 "backend": self._backend_combo.currentText(),
@@ -366,6 +373,7 @@ class SettingsWindow(QDialog):
 
         for section, values in cfg.items():
             base.setdefault(section, {}).update(values)
+        base["audio"].pop("device", None)  # superseded by audio.devices
 
         _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with _CONFIG_PATH.open("w", encoding="utf-8") as fh:

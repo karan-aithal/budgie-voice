@@ -70,6 +70,7 @@ class DictationService:
         self._on_preview = on_preview
         # The session fires the callback itself, on every transition.
         self._session = DictationSession(on_change=on_state_change)
+        adapter.on_silent = self._on_mic_silent
         self._last_toggle = 0.0
         self._send_task: asyncio.Task[None] | None = None
         self._recv_task: asyncio.Task[None] | None = None
@@ -183,7 +184,8 @@ class DictationService:
 
         await self._session.to_starting(window_id)
         try:
-            self._adapter.open()
+            # pactl / BT profile switch / PortAudio block for up to seconds: keep them off the loop.
+            await asyncio.get_running_loop().run_in_executor(None, self._adapter.open)
             await self._session.to_recording()
             self._send_task = asyncio.create_task(self._send_loop(), name="myna-send")
         except Exception:  # noqa: BLE001
@@ -246,7 +248,7 @@ class DictationService:
             await asyncio.gather(self._send_task, return_exceptions=True)
             self._send_task = None
         try:
-            self._adapter.close()
+            await asyncio.get_running_loop().run_in_executor(None, self._adapter.close)
         except Exception:  # noqa: BLE001
             _LOG.exception("Closing the audio adapter failed")
 
@@ -318,6 +320,9 @@ class DictationService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _on_mic_silent(self, label: str) -> None:
+        asyncio.ensure_future(_notify(self._settings, f"⚠️ Mic silent: {label}"))
 
     async def _verify_speaker(self) -> bool:
         if not self._settings.speaker.enabled or not self._audio_buf:

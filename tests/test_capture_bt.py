@@ -68,11 +68,25 @@ def test_each_session_switches_to_headset_and_back(bt) -> None:
     assert switches.count("headset-head-unit-msbc") == 2
 
 
+def test_input_gain_applied_and_clamped(bt, monkeypatch) -> None:
+    state, _ = bt
+    state["switch_ok"] = True
+    calls: list[list[str]] = []
+    real_run = capture.subprocess.run
+    monkeypatch.setattr(capture.subprocess, "run", lambda cmd, **kw: (calls.append(cmd), real_run(cmd, **kw))[1])
+    cap = capture.AudioCapture(
+        AudioSettings(device=f"bt:{CARD}", input_gain_pct=300), asyncio.new_event_loop(),
+    )
+    cap.start()
+    assert ["pactl", "set-source-volume", "bluez_input.AA_BB.headset-head-unit", "150%"] in calls
+    cap.stop()
+
+
 def test_no_headset_mic_raises_and_releases_card(bt) -> None:
     state, switches = bt  # switches fail, no source ever appears
     cap = _capture()
 
-    with pytest.raises(RuntimeError, match="Headset mic not available"):
+    with pytest.raises(RuntimeError, match="headset mic not available"):
         cap.start()
     assert "a2dp-sink-sbc_xq" in switches  # restore was attempted
     assert "PULSE_SOURCE" not in os.environ

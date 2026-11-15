@@ -59,6 +59,9 @@ Copy the example: `cp config.yaml.example ~/.config/myna/config.yaml`int8
 | `vad.aggressiveness` | `2` | Silero VAD 0 (permissive) – 3 (strict) |
 | `vad.speech_pad_ms` | `300` | Trailing silence before segment ends |
 | `audio.denoise` | `true` | noisereduce suppression |
+| `audio.devices` | `[]` | Ordered mic preference (`bt:<card>`, `pa:<source>`, ALSA name); the first that works at session start wins. Empty = Auto: first real mic (not monitor, loopback, S/PDIF or Bluetooth), else the system default. A Bluetooth headset is only used when listed, since its mic drops playback to mSBC quality while you dictate |
+| `audio.input_gain_pct` | `null` | BT mic gain 50–150 %, applied when a `bt:` device is used |
+| `vad.pre_roll_ms` | `300` | Audio kept from before the first speech chunk so word onsets are not clipped |
 
 Full reference: [`config.yaml.example`](config.yaml.example)
 
@@ -230,7 +233,7 @@ with the new path — don't hand-edit the paths above.
 
 | Symptom | Fix |
 |---|---|
-| `MynaMicError` | `sudo apt install libportaudio2`; check `audio.device` in config |
+| `MynaMicError` | `sudo apt install libportaudio2`; check `audio.devices` in config |
 | `xdotool not found` | `sudo apt install xdotool` |
 | No text injected on Wayland/GNOME | `sudo apt install ydotool`; add yourself to the `input` group (or add a udev rule for `/dev/uinput`), then re-login |
 | Text injected into wrong window | Ensure focus is in target window **before** pressing hotkey. The window focused at session start is re-activated before typing |

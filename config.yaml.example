@@ -12,7 +12,9 @@ activation:
   debounce_ms: 350        # Drop a repeat from the same source inside this window
 
 audio:
-  device: null
+  devices: []             # ordered preference, first that works wins; [] = Auto (built-in mic first)
+                          # e.g. ["bt:bluez_card.AA_BB_CC_DD_EE_FF", "pa:alsa_input.usb-..."]
+  input_gain_pct: null    # BT mic gain 50-150 applied when a bt: device is used; null = leave alone
   sample_rate: 16000
   chunk_duration_ms: 30
   denoise: true
@@ -21,6 +23,7 @@ vad:
   enabled: true
   aggressiveness: 2       # Silero sensitivity 0–3 (higher = more speech detected)
   speech_pad_ms: 300      # ms of trailing silence before emitting segment
+  pre_roll_ms: 300        # ms of audio kept from before the first speech chunk
 
 inference:
   backend: "faster_whisper"   # "faster_whisper" | "parakeet"

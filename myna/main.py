@@ -86,6 +86,10 @@ async def main_async() -> bool:
     # Audio + pipeline + injection
     # ------------------------------------------------------------------
     adapter = AudioAdapter(settings.audio, settings.vad, loop)
+    try:  # first load may download the model; do it now, not on the first hotkey press
+        await loop.run_in_executor(None, adapter.preload)
+    except Exception as exc:  # noqa: BLE001 — open() retries the load per session
+        _LOG.warning("VAD preload failed (%s) — will retry on first session", exc)
 
     pp = settings.postprocessing
     pipeline = PostProcessingPipeline(
