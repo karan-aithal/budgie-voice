@@ -1,7 +1,7 @@
-# Myna — Voice Typing Assistant — example configuration
-# Copy to: ~/.config/myna/config.yaml
-# Myna uses defaults for any key not present. Section/key names below match
-# the dataclasses in myna/config/settings.py exactly.
+# Budgie — Voice Typing Assistant — example configuration
+# Copy to: ~/.config/budgie-voice/config.yaml
+# Budgie uses defaults for any key not present. Section/key names below match
+# the dataclasses in budgie_voice/config/settings.py exactly.
 
 activation:
   hotkey: "ctrl+space"    # Any combo parseable by pynput (used when trigger=pynput)
@@ -38,14 +38,14 @@ inference:
 
 speaker:
   enabled: true
-  voiceprint_path: "~/.config/myna/voiceprint.pt"
+  voiceprint_path: "~/.config/budgie-voice/voiceprint.pt"
   threshold: 0.65         # Cosine similarity threshold 0–1
 
 learning:
   adapt_voiceprint: true
   vocab_enabled: true
   corrections_enabled: true
-  dictionary_path: "~/.config/myna/dictionary.txt"   # your names/jargon, one per line
+  dictionary_path: "~/.config/budgie-voice/dictionary.txt"   # your names/jargon, one per line
 
 injection:
   backend: "auto"         # "auto" | "ydotool" | "xdotool"

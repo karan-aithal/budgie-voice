@@ -7,10 +7,10 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from myna.audio import capture
-from myna.audio.adapter import AudioAdapter
-from myna.audio.vad import VADFilter
-from myna.config.settings import AudioSettings, VadSettings
+from budgie_voice.audio import capture
+from budgie_voice.audio.adapter import AudioAdapter
+from budgie_voice.audio.vad import VADFilter
+from budgie_voice.config.settings import AudioSettings, VadSettings
 
 
 class _Score:
@@ -68,7 +68,7 @@ def test_open_resets_vad_state() -> None:
     adapter = AudioAdapter(AudioSettings(), VadSettings(), asyncio.new_event_loop())
     adapter._vad._model = model  # noqa: SLF001
     adapter._capture = MagicMock()  # noqa: SLF001
-    with patch("myna.audio.adapter._play_open_cue"):
+    with patch("budgie_voice.audio.adapter._play_open_cue"):
         adapter.open()
     model.reset_states.assert_called()
 

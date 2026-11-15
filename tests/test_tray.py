@@ -16,7 +16,7 @@ pytest.importorskip("PyQt6.QtWidgets")
 
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from myna.indicator.tray import TrayIcon  # noqa: E402
+from budgie_voice.indicator.tray import TrayIcon  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -33,7 +33,7 @@ def _make_tray(**overrides):
         on_settings=lambda: None,
         on_quit=lambda: calls.__setitem__("quit", calls["quit"] + 1),
         on_restart=lambda: calls.__setitem__("restart", calls["restart"] + 1),
-        log_path=Path("/tmp/myna-test.log"),
+        log_path=Path("/tmp/budgie-voice-test.log"),
     )
     kwargs.update(overrides)
     return TrayIcon(**kwargs), calls  # type: ignore[arg-type]

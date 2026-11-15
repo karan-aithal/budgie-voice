@@ -7,10 +7,10 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from myna.audio.adapter import AudioAdapter
-from myna.audio.vad import VADFilter
-from myna.config.settings import AudioSettings, VadSettings
-from myna.inference.protocol import AudioFrame, TranscriptSegment
+from budgie_voice.audio.adapter import AudioAdapter
+from budgie_voice.audio.vad import VADFilter
+from budgie_voice.config.settings import AudioSettings, VadSettings
+from budgie_voice.inference.protocol import AudioFrame, TranscriptSegment
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 set -euo pipefail
 
-echo "=== Myna — dependency installation ==="
+echo "=== Budgie — dependency installation ==="
 
 if [[ -z "${VIRTUAL_ENV:-}" ]]; then
     echo "ERROR: Activate the virtual environment first:"
@@ -90,7 +90,7 @@ WhisperModel(
     "small",
     device="cpu",
     compute_type="int8",
-    download_root=os.path.expanduser("~/.local/share/myna/models"),
+    download_root=os.path.expanduser("~/.local/share/budgie-voice/models"),
 )
 
 print("✓ Whisper model cached")
@@ -105,7 +105,7 @@ echo "[5/5] Pre-caching Silero VAD..."
 import os
 import torch
 
-torch.hub.set_dir(os.path.expanduser("~/.local/share/myna/torch_hub"))
+torch.hub.set_dir(os.path.expanduser("~/.local/share/budgie-voice/torch_hub"))
 torch.hub.load(
     "snakers4/silero-vad",
     "silero_vad",
@@ -125,6 +125,6 @@ echo "Verify:"
 echo "  $PYTHON -c 'import gi, dbus'"
 echo
 echo "Then run:"
-echo "  python -m myna.speaker.enroller"
-echo "  python -m myna.main"
+echo "  python -m budgie_voice.speaker.enroller"
+echo "  python -m budgie_voice.main"
 echo "========================================="

@@ -5,8 +5,8 @@ import asyncio
 
 import pytest
 
-from myna.orchestrator.session import DictationSession, SessionState
-from myna.utils.exceptions import MynaSessionError
+from budgie_voice.orchestrator.session import DictationSession, SessionState
+from budgie_voice.utils.exceptions import BudgieSessionError
 
 
 # ---------------------------------------------------------------------------
@@ -61,21 +61,21 @@ async def test_cancel_from_idle_is_noop() -> None:
 async def test_starting_from_non_idle_raises() -> None:
     session = DictationSession()
     await session.to_starting(None)  # IDLE → STARTING
-    with pytest.raises(MynaSessionError):
+    with pytest.raises(BudgieSessionError):
         await session.to_starting(None)  # already STARTING → raise
 
 
 @pytest.mark.asyncio
 async def test_recording_before_starting_raises() -> None:
     session = DictationSession()
-    with pytest.raises(MynaSessionError):
+    with pytest.raises(BudgieSessionError):
         await session.to_recording()
 
 
 @pytest.mark.asyncio
 async def test_finalizing_from_idle_raises() -> None:
     session = DictationSession()
-    with pytest.raises(MynaSessionError):
+    with pytest.raises(BudgieSessionError):
         await session.to_finalizing()
 
 
@@ -84,7 +84,7 @@ async def test_completed_without_finalizing_raises() -> None:
     session = DictationSession()
     await session.to_starting(None)
     await session.to_recording()
-    with pytest.raises(MynaSessionError):
+    with pytest.raises(BudgieSessionError):
         await session.to_completed()
 
 

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from myna.inference.protocol import AudioFrame, TranscriptSegment
+from budgie_voice.inference.protocol import AudioFrame, TranscriptSegment
 
 
 # ---------------------------------------------------------------------------
@@ -52,8 +52,8 @@ def test_transcript_segment_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_faster_whisper_capabilities() -> None:
-    from myna.inference.backends.base import INTERFACE_VERSION  # noqa: PLC0415
-    from myna.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
+    from budgie_voice.inference.backends.base import INTERFACE_VERSION  # noqa: PLC0415
+    from budgie_voice.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
 
     backend = FasterWhisperBackend()
     caps = await backend.capabilities()
@@ -64,7 +64,7 @@ async def test_faster_whisper_capabilities() -> None:
 
 
 def test_faster_whisper_not_ready_before_load() -> None:
-    from myna.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
+    from budgie_voice.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
 
     backend = FasterWhisperBackend()
     assert backend.is_ready is False
@@ -72,7 +72,7 @@ def test_faster_whisper_not_ready_before_load() -> None:
 
 @pytest.mark.asyncio
 async def test_faster_whisper_transcribe_empty_yields_nothing() -> None:
-    from myna.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
+    from budgie_voice.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
 
     backend = FasterWhisperBackend()
 
@@ -90,7 +90,7 @@ async def test_faster_whisper_transcribe_empty_yields_nothing() -> None:
 # ---------------------------------------------------------------------------
 
 def test_registry_get_backend() -> None:
-    from myna.inference.backends.registry import get_backend  # noqa: PLC0415
+    from budgie_voice.inference.backends.registry import get_backend  # noqa: PLC0415
 
     backend = get_backend("faster_whisper")
     assert backend.backend_name if hasattr(backend, "backend_name") else True
@@ -98,14 +98,14 @@ def test_registry_get_backend() -> None:
 
 
 def test_registry_unknown_raises() -> None:
-    from myna.inference.backends.registry import get_backend  # noqa: PLC0415
+    from budgie_voice.inference.backends.registry import get_backend  # noqa: PLC0415
 
     with pytest.raises(KeyError):
         get_backend("nonexistent_model")
 
 
 def test_registry_available_backends() -> None:
-    from myna.inference.backends.registry import available_backends  # noqa: PLC0415
+    from budgie_voice.inference.backends.registry import available_backends  # noqa: PLC0415
 
     backends = available_backends()
     assert "faster_whisper" in backends

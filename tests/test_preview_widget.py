@@ -17,7 +17,7 @@ pytest.importorskip("PyQt6.QtWidgets")
 from PyQt6.QtGui import QColor, QPainter, QPixmap  # noqa: E402
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
-from myna.indicator.preview_widget import (  # noqa: E402
+from budgie_voice.indicator.preview_widget import (  # noqa: E402
     _FONT_PX,
     _HEIGHT,
     _PANEL_ALPHA,

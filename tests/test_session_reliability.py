@@ -11,13 +11,13 @@ from unittest.mock import AsyncMock, MagicMock
 
 import numpy as np
 
-from myna.config.settings import Settings
-from myna.inference.client import InferenceClient
-from myna.inference.protocol import AudioFrame, TranscriptSegment
-from myna.inference.server import _handle_ws
-from myna.orchestrator import dictation_service
-from myna.orchestrator.dictation_service import DictationService
-from myna.orchestrator.session import SessionState
+from budgie_voice.config.settings import Settings
+from budgie_voice.inference.client import InferenceClient
+from budgie_voice.inference.protocol import AudioFrame, TranscriptSegment
+from budgie_voice.inference.server import _handle_ws
+from budgie_voice.orchestrator import dictation_service
+from budgie_voice.orchestrator.dictation_service import DictationService
+from budgie_voice.orchestrator.session import SessionState
 
 
 class _Link:

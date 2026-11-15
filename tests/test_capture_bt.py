@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from myna.audio import capture
-from myna.config.settings import AudioSettings
+from budgie_voice.audio import capture
+from budgie_voice.config.settings import AudioSettings
 
 CARD = "bluez_card.AA_BB"
 

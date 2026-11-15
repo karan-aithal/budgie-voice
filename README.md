@@ -1,6 +1,6 @@
-# Myna — Voice Typing Assistant
+# Budgie — Voice Typing Assistant
 
-> Named after the myna bird — listens intently, reproduces speech as clean text.
+> Named after the budgie bird — listens intently, reproduces speech as clean text.
 
 100 % local voice-to-text for Ubuntu 24.04 LTS (X11 and native Wayland/GNOME).  Speak → text appears in any focused window.  No audio ever leaves the machine.
 
@@ -12,22 +12,22 @@
 
 ```bash
 # 1. Clone + install
-git clone https://github.com/you/myna-voice && cd myna-voice
+git clone https://github.com/you/budgie-voice && cd budgie-voice
 python3.12 -m venv .venv && source .venv/bin/activate
 bash scripts/install_deps.sh
 
 # 2. Enroll your voice (optional — enables speaker verification)
-python3.12 -m myna.speaker.enroller
+python3.12 -m budgie_voice.speaker.enroller
 
 # 3. Run
-python3.12 -m myna.main
+python3.12 -m budgie_voice.main
 # or as a systemd service that starts on login:
 bash scripts/install_service.sh
 ```
-✓ Myna installed and running.
-  Status : systemctl --user status myna
-  Logs   : journalctl --user -u myna -f
-  Enroll : python3.12 -m myna.speaker.enroller
+✓ Budgie installed and running.
+  Status : systemctl --user status budgie-voice
+  Logs   : journalctl --user -u budgie-voice -f
+  Enroll : python3.12 -m budgie_voice.speaker.enroller
   
 Press **Ctrl+Space** to start dictating.  Press again to stop → text appears at cursor.
 
@@ -35,8 +35,8 @@ Press **Ctrl+Space** to start dictating.  Press again to stop → text appears a
 
 ## Configuration
 
-Config file: `~/.config/myna/config.yaml`
-Copy the example: `cp config.yaml.example ~/.config/myna/config.yaml`int8
+Config file: `~/.config/budgie-voice/config.yaml`
+Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int8
 
 ### Key settings
 
@@ -54,7 +54,7 @@ Copy the example: `cp config.yaml.example ~/.config/myna/config.yaml`int8
 | `inference.beam_size` | `5` | Whisper beam size (1 = fastest greedy) |
 | `inference.finalize_timeout_s` | `15` | Max wait at stop for the last turn's transcription; on timeout nothing is typed |
 | `inference.min_turn_s` | `15` | A pause closes a turn only once it holds this much audio, so short dictations are transcribed in one pass; longer ones stream turn by turn |
-| `learning.dictionary_path` | `~/.config/myna/dictionary.txt` | Your names and jargon, one per line (`#` comments allowed), sent to the decoder as hotwords together with words you corrected in the preview. Whisper uses them; Parakeet ignores hotwords |
+| `learning.dictionary_path` | `~/.config/budgie-voice/dictionary.txt` | Your names and jargon, one per line (`#` comments allowed), sent to the decoder as hotwords together with words you corrected in the preview. Whisper uses them; Parakeet ignores hotwords |
 | `injection.backend` | `auto` | `auto` \| `ydotool` \| `xdotool` |
 | `speaker.enabled` | `true` | Speaker verification on/off |
 | `speaker.threshold` | `0.75` | Cosine similarity cutoff |
@@ -91,9 +91,9 @@ the Wayland protocol has no client-side global grab. On native Wayland (or with
 P=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/
 S=org.gnome.settings-daemon.plugins.media-keys.custom-keybinding
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['$P']"
-gsettings set $S:$P name 'Myna Toggle'
+gsettings set $S:$P name 'Budgie Toggle'
 gsettings set $S:$P binding '<Primary>space'
-gsettings set $S:$P command 'dbus-send --session --type=method_call --dest=com.canonical.Myna /com/canonical/Myna com.canonical.Myna.Toggle'
+gsettings set $S:$P command 'dbus-send --session --type=method_call --dest=io.gitlab.karanaithal841.BudgieVoice /io/gitlab/karanaithal841/BudgieVoice io.gitlab.karanaithal841.BudgieVoice.Toggle'
 ```
 
 Leaving this shortcut installed on X11 is safe: with `trigger: auto` pynput owns the key there
@@ -131,11 +131,11 @@ identically on X11 and Wayland.
 
 ## Adding a New STT Backend
 
-1. **Create** `myna/inference/backends/mybackend.py`:
+1. **Create** `budgie_voice/inference/backends/mybackend.py`:
 
 ```python
-from myna.inference.backends.base import InferenceBackend, BackendCapabilities
-from myna.inference.protocol import TranscriptSegment
+from budgie_voice.inference.backends.base import InferenceBackend, BackendCapabilities
+from budgie_voice.inference.protocol import TranscriptSegment
 
 class MyBackend(InferenceBackend):
     async def load(self, model: str, device: str, compute_type: str) -> None: ...
@@ -146,10 +146,10 @@ class MyBackend(InferenceBackend):
     def is_ready(self) -> bool: ...
 ```
 
-2. **Register** in `myna/inference/backends/registry.py`:
+2. **Register** in `budgie_voice/inference/backends/registry.py`:
 
 ```python
-from myna.inference.backends.mybackend import MyBackend
+from budgie_voice.inference.backends.mybackend import MyBackend
 _REGISTRY["mybackend"] = MyBackend
 ```
 
@@ -159,10 +159,10 @@ _REGISTRY["mybackend"] = MyBackend
 
 ## Adding a New Injection Backend
 
-1. **Create** `myna/injection/mybackend.py`:
+1. **Create** `budgie_voice/injection/mybackend.py`:
 
 ```python
-from myna.injection.base import TextOutputBackend
+from budgie_voice.injection.base import TextOutputBackend
 
 class MyInjectionBackend(TextOutputBackend):
     async def start_session(self, target_window_id: int | None) -> None: ...
@@ -174,7 +174,7 @@ class MyInjectionBackend(TextOutputBackend):
     def backend_name(self) -> str: return "mybackend"
 ```
 
-2. **Register** in `myna/injection/selector.py` — add a `case "mybackend":` branch.
+2. **Register** in `budgie_voice/injection/selector.py` — add a `case "mybackend":` branch.
 
 3. **Set** in config: `injection.backend: "mybackend"`
 
@@ -187,36 +187,36 @@ class MyInjectionBackend(TextOutputBackend):
 bash scripts/install_service.sh
 
 # Status
-systemctl --user status myna
+systemctl --user status budgie-voice
 
 # Live logs
-journalctl --user -u myna -f
+journalctl --user -u budgie-voice -f
 # — or —
-tail -f ~/.local/share/myna/logs/myna.log
+tail -f ~/.local/share/budgie-voice/logs/budgie-voice.log
 
 # Stop / restart / disable
-systemctl --user stop    myna
-systemctl --user restart myna
-systemctl --user disable myna
+systemctl --user stop    budgie-voice
+systemctl --user restart budgie-voice
+systemctl --user disable budgie-voice
 
 # Full uninstall (preserves config + logs)
 bash scripts/uninstall_service.sh
 ```
 
-Service unit installed at `~/.config/systemd/user/myna.service`, generated with this
+Service unit installed at `~/.config/systemd/user/budgie-voice.service`, generated with this
 checkout's own paths baked in — it runs in place via `.venv/bin/python3.12`, not a
 copied install or the system interpreter:
 
 ```ini
 [Unit]
-Description=Myna Voice Typing Assistant
+Description=Budgie Voice Typing Assistant
 After=graphical-session.target
 PartOf=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/path/to/myna-voice/.venv/bin/python3.12 -m myna.main
-WorkingDirectory=/path/to/myna-voice
+ExecStart=/path/to/budgie-voice/.venv/bin/python3.12 -m budgie_voice.main
+WorkingDirectory=/path/to/budgie-voice
 Restart=on-failure
 RestartSec=5
 Environment=DISPLAY=:0
@@ -235,15 +235,15 @@ with the new path — don't hand-edit the paths above.
 
 | Symptom | Fix |
 |---|---|
-| `MynaMicError` | `sudo apt install libportaudio2`; check `audio.devices` in config |
+| `BudgieMicError` | `sudo apt install libportaudio2`; check `audio.devices` in config |
 | `xdotool not found` | `sudo apt install xdotool` |
 | No text injected on Wayland/GNOME | `sudo apt install ydotool`; add yourself to the `input` group (or add a udev rule for `/dev/uinput`), then re-login |
 | Text injected into wrong window | Ensure focus is in target window **before** pressing hotkey. The window focused at session start is re-activated before typing |
-| Nothing typed on X11 despite `Injecting:` in the log | Injection must not pass `xdotool --window` — that uses `XSendEvent`, which Electron/Firefox/GTK apps silently discard (see `xdotool(1)` SENDEVENT NOTES). Myna activates the target window and types via XTEST instead |
-| No text injected after hotkey | Lower `inference.confidence_threshold`; check `journalctl --user -u myna` |
-| Session starts then stops instantly (`chunks=0`/`chunks=1` in the log) | Two triggers are firing for one press. Check `grep 'Toggle from' ~/.local/share/myna/logs/myna.log` — you should see exactly one `accepted` per press. Set `activation.trigger` explicitly to `pynput` or `dbus` |
+| Nothing typed on X11 despite `Injecting:` in the log | Injection must not pass `xdotool --window` — that uses `XSendEvent`, which Electron/Firefox/GTK apps silently discard (see `xdotool(1)` SENDEVENT NOTES). Budgie activates the target window and types via XTEST instead |
+| No text injected after hotkey | Lower `inference.confidence_threshold`; check `journalctl --user -u budgie-voice` |
+| Session starts then stops instantly (`chunks=0`/`chunks=1` in the log) | Two triggers are firing for one press. Check `grep 'Toggle from' ~/.local/share/budgie-voice/logs/budgie-voice.log` — you should see exactly one `accepted` per press. Set `activation.trigger` explicitly to `pynput` or `dbus` |
 | Hotkey does nothing on Wayland | `trigger` must resolve to `dbus` there; add the GNOME custom shortcut above |
-| Speaker verify always fails | Re-enroll: `python3.12 -m myna.speaker.enroller` |
+| Speaker verify always fails | Re-enroll: `python3.12 -m budgie_voice.speaker.enroller` |
 | Tray icon missing | `sudo apt install python3-pyqt6`; verify `DISPLAY=:0` in service env |
 | DBus `GetState` not found | `sudo apt install python3-dbus python3-gi` |
 | Whisper very slow | `inference.device: cuda` (GPU) or `inference.model: tiny` (fastest CPU) |
@@ -269,7 +269,7 @@ pytest tests/ -v
 ## Project Structure
 
 ```
-myna/
+budgie_voice/
 ├── main.py                        # QApplication + qasync entry point
 ├── orchestrator/
 │   ├── session.py                 # SessionState enum + DictationSession
@@ -309,11 +309,11 @@ myna/
 ├── settings_ui/
 │   └── window.py                  # QDialog settings UI
 ├── dbus/
-│   └── service.py                 # com.canonical.Myna DBus service
+│   └── service.py                 # io.gitlab.karanaithal841.BudgieVoice DBus service
 ├── config/
 │   └── settings.py                # YAML → Settings dataclass
 └── utils/
-    ├── exceptions.py              # MynaMicError, MynaInferenceError, …
+    ├── exceptions.py              # BudgieMicError, BudgieInferenceError, …
     └── logging_setup.py           # Rotating file + stderr
 tests/
 ├── test_audio_adapter.py
@@ -335,9 +335,9 @@ requirements.txt
 
 | Path | Content |
 |---|---|
-| `~/.config/myna/config.yaml` | User configuration |
-| `~/.config/myna/voiceprint.pt` | Enrolled speaker embedding |
-| `~/.local/share/myna/logs/myna.log` | Rotating log (5 MB × 3) |
-| `~/.local/share/myna/models/` | Whisper model weights |
-| `~/.local/share/myna/speechbrain/` | ECAPA-TDNN speaker model |
-| `~/.local/share/myna/torch_hub/` | Silero VAD model |
+| `~/.config/budgie-voice/config.yaml` | User configuration |
+| `~/.config/budgie-voice/voiceprint.pt` | Enrolled speaker embedding |
+| `~/.local/share/budgie-voice/logs/budgie-voice.log` | Rotating log (5 MB × 3) |
+| `~/.local/share/budgie-voice/models/` | Whisper model weights |
+| `~/.local/share/budgie-voice/speechbrain/` | ECAPA-TDNN speaker model |
+| `~/.local/share/budgie-voice/torch_hub/` | Silero VAD model |

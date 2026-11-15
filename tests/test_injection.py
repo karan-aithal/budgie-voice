@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from myna.injection.secure import SecureFieldDetector
+from budgie_voice.injection.secure import SecureFieldDetector
 
 
 # ---------------------------------------------------------------------------
@@ -47,14 +47,14 @@ class TestXdotoolBackend:
     def _make_backend(self) -> object:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="99999\n")
-            from myna.injection.xdotool import XdotoolBackend  # noqa: PLC0415
+            from budgie_voice.injection.xdotool import XdotoolBackend  # noqa: PLC0415
 
             return XdotoolBackend(delay_ms=0)
 
     def test_commit_text_calls_xdotool_type(self) -> None:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="99999\n")
-            from myna.injection.xdotool import XdotoolBackend  # noqa: PLC0415
+            from budgie_voice.injection.xdotool import XdotoolBackend  # noqa: PLC0415
 
             backend = XdotoolBackend(delay_ms=0)
 
@@ -74,7 +74,7 @@ class TestXdotoolBackend:
     def test_commit_text_newline_sends_return(self) -> None:
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="99999\n")
-            from myna.injection.xdotool import XdotoolBackend  # noqa: PLC0415
+            from budgie_voice.injection.xdotool import XdotoolBackend  # noqa: PLC0415
 
             backend = XdotoolBackend(delay_ms=0)
 
@@ -97,7 +97,7 @@ class TestXdotoolBackend:
         """
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="99999\n")
-            from myna.injection.xdotool import XdotoolBackend  # noqa: PLC0415
+            from budgie_voice.injection.xdotool import XdotoolBackend  # noqa: PLC0415
 
             backend = XdotoolBackend(delay_ms=0)
 
@@ -123,7 +123,7 @@ class TestXdotoolBackend:
         """A dead/unfocusable target must not block injection into current focus."""
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="99999\n")
-            from myna.injection.xdotool import XdotoolBackend  # noqa: PLC0415
+            from budgie_voice.injection.xdotool import XdotoolBackend  # noqa: PLC0415
 
             backend = XdotoolBackend(delay_ms=0)
 
@@ -142,7 +142,7 @@ class TestXdotoolBackend:
             asyncio.run(_run())
 
     def test_sanitize_strips_control_chars(self) -> None:
-        from myna.injection.xdotool import _sanitize  # noqa: PLC0415
+        from budgie_voice.injection.xdotool import _sanitize  # noqa: PLC0415
 
         assert _sanitize("hello\x00world") == "helloworld"
         assert _sanitize("hello\nworld") == "hello\nworld"
@@ -155,14 +155,14 @@ class TestXdotoolBackend:
 
 class TestBackendSelector:
     def test_explicit_xdotool(self) -> None:
-        from myna.injection.selector import select_backend  # noqa: PLC0415
+        from budgie_voice.injection.selector import select_backend  # noqa: PLC0415
 
-        with patch("myna.injection.xdotool._check_xdotool", return_value=None):
+        with patch("budgie_voice.injection.xdotool._check_xdotool", return_value=None):
             backend = select_backend("xdotool", delay_ms=0)
             assert backend.backend_name == "xdotool"
 
     def test_unknown_raises(self) -> None:
-        from myna.injection.selector import select_backend  # noqa: PLC0415
+        from budgie_voice.injection.selector import select_backend  # noqa: PLC0415
 
         with pytest.raises(ValueError, match="Unknown injection backend"):
             select_backend("nonexistent")

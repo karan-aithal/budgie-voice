@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Myna — stop, disable, and remove the systemd user service
+# Budgie — stop, disable, and remove the systemd user service
 # Runs in place from the checkout (see install_service.sh) — nothing under the
-# project directory is touched. Config (~/.config/myna/) and logs
-# (~/.local/share/myna/) are also preserved.
+# project directory is touched. Config (~/.config/budgie-voice/) and logs
+# (~/.local/share/budgie-voice/) are also preserved.
 set -euo pipefail
 
-SERVICE="myna"
+SERVICE="budgie-voice"
 SERVICE_FILE="${HOME}/.config/systemd/user/${SERVICE}.service"
 
-echo "=== Myna — Uninstall ==="
+echo "=== Budgie — Uninstall ==="
 
 systemctl --user stop    "${SERVICE}" 2>/dev/null || true
 systemctl --user disable "${SERVICE}" 2>/dev/null || true
@@ -21,7 +21,7 @@ fi
 systemctl --user daemon-reload
 
 echo ""
-echo "Myna service uninstalled."
-echo "  Config preserved : ~/.config/myna/"
-echo "  Logs preserved   : ~/.local/share/myna/logs/"
+echo "Budgie service uninstalled."
+echo "  Config preserved : ~/.config/budgie-voice/"
+echo "  Logs preserved   : ~/.local/share/budgie-voice/logs/"
 echo "  Project checkout and .venv left untouched."

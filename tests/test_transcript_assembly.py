@@ -5,8 +5,8 @@ import re
 
 from test_session_reliability import _frame, _Rig
 
-from myna.orchestrator.corrections import CorrectionMemory
-from myna.postprocessing.pipeline import PostProcessingPipeline
+from budgie_voice.orchestrator.corrections import CorrectionMemory
+from budgie_voice.postprocessing.pipeline import PostProcessingPipeline
 
 
 async def test_pauses_do_not_split_the_sentence(monkeypatch) -> None:
@@ -43,14 +43,14 @@ async def test_turn_closes_at_hint_once_long_enough(monkeypatch) -> None:
 async def test_hotwords_are_dictionary_then_corrections(monkeypatch, tmp_path) -> None:
     rig = _Rig(monkeypatch)
     dictionary = tmp_path / "dictionary.txt"
-    dictionary.write_text("# my terms\nParakeet\n\nMyna\n")
+    dictionary.write_text("# my terms\nParakeet\n\nBudgie\n")
     rig.svc._settings.learning.dictionary_path = str(dictionary)  # noqa: SLF001
     memory = CorrectionMemory(tmp_path / "corrections.json")
     memory.learn("a cube here", "a Kubernetes here")
     rig.svc._corrections = memory  # noqa: SLF001
 
     rig.svc._refresh_hotwords()  # noqa: SLF001
-    assert rig.svc._client._hotwords == "Parakeet Myna Kubernetes"  # noqa: SLF001
+    assert rig.svc._client._hotwords == "Parakeet Budgie Kubernetes"  # noqa: SLF001
 
     dictionary.write_text("Zephyr\n")  # edits apply without a restart
     rig.svc._refresh_hotwords()  # noqa: SLF001

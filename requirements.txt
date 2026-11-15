@@ -1,4 +1,4 @@
-# Myna — Python dependencies
+# Budgie — Python dependencies
 # Pinned for reproducibility.
 #
 # PyTorch — choose ONE install line depending on your hardware:

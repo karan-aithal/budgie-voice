@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import pytest
 
-from myna.postprocessing.capitalizer import Capitalizer
-from myna.postprocessing.language_cleanup import LanguageCleanup
-from myna.postprocessing.normalizer import NumberNormalizer
-from myna.postprocessing.pipeline import PostProcessingPipeline
-from myna.postprocessing.punctuation import PunctuationProcessor
+from budgie_voice.postprocessing.capitalizer import Capitalizer
+from budgie_voice.postprocessing.language_cleanup import LanguageCleanup
+from budgie_voice.postprocessing.normalizer import NumberNormalizer
+from budgie_voice.postprocessing.pipeline import PostProcessingPipeline
+from budgie_voice.postprocessing.punctuation import PunctuationProcessor
 
 
 # ---------------------------------------------------------------------------

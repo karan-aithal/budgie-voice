@@ -13,9 +13,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from myna.config.settings import ActivationSettings, Settings
-from myna.orchestrator.dictation_service import DictationService
-from myna.orchestrator.session import SessionState
+from budgie_voice.config.settings import ActivationSettings, Settings
+from budgie_voice.orchestrator.dictation_service import DictationService
+from budgie_voice.orchestrator.session import SessionState
 
 
 def _service(debounce_ms: int = 350, trigger: str = "pynput") -> DictationService:

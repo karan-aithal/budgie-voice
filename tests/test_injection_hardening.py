@@ -7,17 +7,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from test_session_reliability import _frame, _Rig
 
-from myna.injection.base import chunk_text
-from myna.injection.secure import SecureFieldDetector
-from myna.orchestrator import dictation_service
-from myna.utils.exceptions import MynaInjectionError
+from budgie_voice.injection.base import chunk_text
+from budgie_voice.injection.secure import SecureFieldDetector
+from budgie_voice.orchestrator import dictation_service
+from budgie_voice.utils.exceptions import BudgieInjectionError
 
 DELAY_MS = 12
 
 
 def _xdotool():
     with patch("subprocess.run", return_value=MagicMock(returncode=0)):
-        from myna.injection.xdotool import XdotoolBackend  # noqa: PLC0415
+        from budgie_voice.injection.xdotool import XdotoolBackend  # noqa: PLC0415
 
         return XdotoolBackend(delay_ms=DELAY_MS)
 
@@ -49,17 +49,17 @@ def test_nonzero_exit_raises_with_stderr_and_stops() -> None:
     text = " ".join(f"word{i}" for i in range(200))
 
     with patch("subprocess.run", return_value=MagicMock(returncode=1, stderr=b"X Error: BadWindow")) as run:
-        with pytest.raises(MynaInjectionError, match="BadWindow"):
+        with pytest.raises(BudgieInjectionError, match="BadWindow"):
             backend._type_segment(text)  # noqa: SLF001
 
     assert run.call_count == 1  # first failed piece ends the typing
 
 
 def test_ydotool_maps_the_non_ascii_the_pipeline_emits() -> None:
-    with patch("myna.injection.ydotool_backend.is_ydotool_available", return_value=True), patch(
-        "myna.injection.ydotool_backend._ensure_daemon",
+    with patch("budgie_voice.injection.ydotool_backend.is_ydotool_available", return_value=True), patch(
+        "budgie_voice.injection.ydotool_backend._ensure_daemon",
     ):
-        from myna.injection.ydotool_backend import YdotoolBackend  # noqa: PLC0415
+        from budgie_voice.injection.ydotool_backend import YdotoolBackend  # noqa: PLC0415
 
         backend = YdotoolBackend(delay_ms=DELAY_MS)
 
@@ -88,7 +88,7 @@ async def test_last_transcript_replaced_per_session_and_failure_points_to_it(mon
     await rig.dictate(_frame(2000))
     assert rig.svc.last_transcript == "2000"
 
-    rig.injector.commit_text = AsyncMock(side_effect=MynaInjectionError("xdotool died"))
+    rig.injector.commit_text = AsyncMock(side_effect=BudgieInjectionError("xdotool died"))
     await rig.dictate(_frame(3000))
 
     assert rig.svc.last_transcript == "3000"  # kept although typing failed
