@@ -15,7 +15,7 @@ import sounddevice as sd
 import torch
 from PyQt6.QtCore import QThread, pyqtSignal
 
-from budgie_voice.audio.capture import _restore_default_source, _set_bt_default_source
+from budgie_voice.audio.capture import _find_bt_source
 
 _LOG = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ class RecordWorker(QThread):
             sd_device: int | str | None
             _restore_card: str | None = None
             _restore_profile: str | None = None
-            _prev_default: str | None = None
+            pinned = False
 
             if isinstance(self._device, str) and self._device.startswith("bt:"):
                 # BT card in A2DP — switch to HFP/mSBC profile to enable mic
@@ -111,23 +111,19 @@ class RecordWorker(QThread):
                         continue
                 if not switched:
                     _LOG.warning("Could not switch BT profile for %s", card)
-                # Pin the recording to the BT mic — "pulse" records the
-                # default source, which may be a silent loopback otherwise.
-                _src, _prev_default = _set_bt_default_source(card)
+                # Pin only this stream to the BT mic — "pulse" records the
+                # default source, which may be a silent loopback otherwise. The
+                # system default is left alone so other apps keep their mic.
+                _src = _find_bt_source(card)
                 if _src:
                     os.environ["PULSE_SOURCE"] = _src
+                    pinned = True
                 sd_device = "pulse"
 
             elif isinstance(self._device, str) and self._device.startswith("pa:"):
-                # explicit PA source — set as default then record via pulse
-                source = self._device[3:]
-                try:
-                    subprocess.run(
-                        ["pactl", "set-default-source", source],
-                        check=True, timeout=5, capture_output=True,
-                    )
-                except Exception as e:
-                    _LOG.warning("pactl set-default-source failed: %s", e)
+                # explicit PA source — pin this stream only, never the system default
+                os.environ["PULSE_SOURCE"] = self._device[3:]
+                pinned = True
                 sd_device = "pulse"
 
             else:
@@ -140,11 +136,11 @@ class RecordWorker(QThread):
             _LOG.error("RecordWorker error: %s", exc)
             self.error.emit(str(exc))
         finally:
+            if pinned:
+                os.environ.pop("PULSE_SOURCE", None)
             # Restore A2DP/SBC-XQ after BT mic recording
             if _restore_card and _restore_profile:
-                os.environ.pop("PULSE_SOURCE", None)
                 _restore_bt_profile(_restore_card, _restore_profile)
-                _restore_default_source(_prev_default)
 
 
 class EnrollWorker(QThread):

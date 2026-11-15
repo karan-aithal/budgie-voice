@@ -20,8 +20,11 @@ def bt(monkeypatch):
     state the fake headset is in."""
     state = {"profile": "a2dp-sink-sbc_xq", "switch_ok": False, "source": None}
     switches: list[str] = []
+    calls: list[list[str]] = []
+    state["calls"] = calls
 
     def run(cmd, **_kw):
+        calls.append(cmd)
         if cmd[:2] == ["pactl", "set-card-profile"]:
             switches.append(cmd[3])
             if not state["switch_ok"]:
@@ -32,7 +35,7 @@ def bt(monkeypatch):
 
     monkeypatch.setattr(capture.subprocess, "run", run)
     monkeypatch.setattr(capture, "_get_active_profile", lambda _card: state["profile"])
-    monkeypatch.setattr(capture, "_set_bt_default_source", lambda _card: (state["source"], "default-src"))
+    monkeypatch.setattr(capture, "_find_bt_source", lambda _card: state["source"])
     monkeypatch.setattr(capture.sd, "InputStream", MagicMock())
     monkeypatch.delenv("PULSE_SOURCE", raising=False)
     return state, switches
@@ -50,7 +53,7 @@ def test_bt_source_found_with_either_naming(monkeypatch, name) -> None:
     sources = f"1\talsa_input.x\tPipeWire\n94\t{name}\tPipeWire\n"
     monkeypatch.setattr(capture.subprocess, "check_output", lambda *a, **k: sources)
     monkeypatch.setattr(capture.subprocess, "run", MagicMock())
-    assert capture._set_bt_default_source(CARD)[0] == name
+    assert capture._find_bt_source(CARD) == name
 
 
 def test_each_session_switches_to_headset_and_back(bt) -> None:
@@ -90,3 +93,14 @@ def test_no_headset_mic_raises_and_releases_card(bt) -> None:
         cap.start()
     assert "a2dp-sink-sbc_xq" in switches  # restore was attempted
     assert "PULSE_SOURCE" not in os.environ
+
+
+def test_bt_mic_becomes_default_and_is_not_restored(bt) -> None:
+    """Chosen behaviour: the BT mic stays the system default after the session."""
+    state, _ = bt
+    state["switch_ok"] = True
+    cap = _capture()
+    cap.start()
+    cap.stop()
+    defaults = [c for c in state["calls"] if "set-default-source" in c]
+    assert defaults == [["pactl", "set-default-source", "bluez_input.AA_BB.headset-head-unit"]]

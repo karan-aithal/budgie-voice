@@ -245,6 +245,7 @@ with the new path — don't hand-edit the paths above.
 | Hotkey does nothing on Wayland | `trigger` must resolve to `dbus` there; add the GNOME custom shortcut above |
 | Speaker verify always fails | Re-enroll: `python3.12 -m budgie_voice.speaker.enroller` |
 | Tray icon missing | `sudo apt install python3-pyqt6`; the service needs the session's `DISPLAY`/`WAYLAND_DISPLAY`: `systemctl --user import-environment DISPLAY XAUTHORITY WAYLAND_DISPLAY XDG_SESSION_TYPE`, then restart the service |
+| Chrome/calls use the BT headset mic after dictation, or the headset stays in mSBC | Budgie makes the BT mic the system default while dictating and does not restore it; the mic source vanishes when the headset returns to A2DP, which only happens once no app records from it. Reset: `pactl set-default-source <your mic>`, then pick it once in Chrome's mic selector |
 | DBus `GetState` not found | `sudo apt install python3-dbus python3-gi` |
 | Whisper very slow | `inference.device: cuda` (GPU) or `inference.model: tiny` (fastest CPU) |
 | `ModuleNotFoundError` | Activate venv; run `pip install -r requirements.txt` |
