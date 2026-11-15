@@ -74,6 +74,12 @@ class VADFilter:
             )
         self.reset()
 
+    def configure(self, aggressiveness: int, speech_pad_ms: int, pre_roll_ms: int) -> None:
+        """Change tuning in place; the loaded model and its state are kept."""
+        self._threshold = _THRESHOLD_MAP.get(aggressiveness, 0.50)
+        self._pad_samples = int(self._sample_rate * speech_pad_ms / 1000)
+        self._pre_roll_samples = int(self._sample_rate * pre_roll_ms / 1000)
+
     def reset(self) -> None:
         """Forget everything from the previous session (model state, buffers, counters)."""
         reset_states = getattr(self._model, "reset_states", None)

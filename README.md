@@ -46,21 +46,21 @@ Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int
 | `activation.mode` | `toggle` | `toggle` \| `push_to_hold` |
 | `activation.trigger` | `auto` | Who owns the hotkey: `auto` \| `pynput` \| `dbus` — see below |
 | `activation.debounce_ms` | `350` | Ignore a repeat from the same source within this window |
-| `inference.model` | `small` | `tiny` \| `small` \| `medium` \| `large-v3` |
-| `inference.backend` | `faster_whisper` | STT backend name |
+| `inference.model` | `small` | A model of the chosen backend (Settings lists them): Whisper `tiny`…`large-v3`, or `nemo-parakeet-*`. An unknown backend or model falls back to `faster_whisper`/`small` with a notification |
+| `inference.backend` | `faster_whisper` | `faster_whisper` \| `parakeet` |
 | `inference.device` | `auto` | `auto` \| `cpu` \| `cuda` |
 | `inference.language` | `en` | BCP-47 language code |
-| `inference.confidence_threshold` | `0.55` | Discard segments below this |
-| `inference.beam_size` | `5` | Whisper beam size (1 = fastest greedy) |
+| `inference.confidence_threshold` | `0.40` | Discard segments below this. Skipped for backends that do not measure confidence (Parakeet) |
+| `inference.beam_size` | `3` | Whisper beam size (1 = fastest greedy) |
 | `inference.finalize_timeout_s` | `15` | Max wait at stop for the last turn's transcription; on timeout nothing is typed |
 | `inference.min_turn_s` | `15` | A pause closes a turn only once it holds this much audio, so short dictations are transcribed in one pass; longer ones stream turn by turn |
 | `learning.dictionary_path` | `~/.config/budgie-voice/dictionary.txt` | Your names and jargon, one per line (`#` comments allowed), sent to the decoder as hotwords together with words you corrected in the preview. Whisper uses them; Parakeet ignores hotwords |
 | `injection.backend` | `auto` | `auto` \| `ydotool` \| `xdotool` |
 | `speaker.enabled` | `true` | Speaker verification on/off |
-| `speaker.threshold` | `0.75` | Cosine similarity cutoff |
+| `speaker.threshold` | `0.65` | Cosine similarity cutoff |
 | `vad.aggressiveness` | `2` | Silero VAD 0 (permissive) – 3 (strict) |
 | `vad.speech_pad_ms` | `300` | Trailing silence before segment ends |
-| `audio.denoise` | `true` | noisereduce suppression |
+| `audio.denoise` | `false` | noisereduce suppression. Off by default: on 30 ms chunks it can gate real speech to silence. Re-enroll your voiceprint after changing it |
 | `audio.devices` | `[]` | Ordered mic preference (`bt:<card>`, `pa:<source>`, ALSA name); the first that works at session start wins. Empty = Auto: first real mic (not monitor, loopback, S/PDIF or Bluetooth), else the system default. A Bluetooth headset is only used when listed, since its mic drops playback to mSBC quality while you dictate |
 | `audio.input_gain_pct` | `null` | BT mic gain 50–150 %, applied when a `bt:` device is used |
 | `vad.pre_roll_ms` | `300` | Audio kept from before the first speech chunk so word onsets are not clipped |
@@ -111,7 +111,7 @@ identically on X11 and Wayland.
 | 🟣 | TRANSCRIBING / FINALIZING | Inference in progress |
 | 🟢 | COMPLETED | Text injected (2 s flash) |
 | 🟠 | LOW_CONFIDENCE | Segment discarded (reverts after 3 s) |
-| 🔴 | ERROR | Fatal error — see log |
+| 🔴 | ERROR | Session failed, nothing typed — see log (2 s flash, then idle) |
 
 ### Punctuation voice commands
 
@@ -244,7 +244,7 @@ with the new path — don't hand-edit the paths above.
 | Session starts then stops instantly (`chunks=0`/`chunks=1` in the log) | Two triggers are firing for one press. Check `grep 'Toggle from' ~/.local/share/budgie-voice/logs/budgie-voice.log` — you should see exactly one `accepted` per press. Set `activation.trigger` explicitly to `pynput` or `dbus` |
 | Hotkey does nothing on Wayland | `trigger` must resolve to `dbus` there; add the GNOME custom shortcut above |
 | Speaker verify always fails | Re-enroll: `python3.12 -m budgie_voice.speaker.enroller` |
-| Tray icon missing | `sudo apt install python3-pyqt6`; verify `DISPLAY=:0` in service env |
+| Tray icon missing | `sudo apt install python3-pyqt6`; the service needs the session's `DISPLAY`/`WAYLAND_DISPLAY`: `systemctl --user import-environment DISPLAY XAUTHORITY WAYLAND_DISPLAY XDG_SESSION_TYPE`, then restart the service |
 | DBus `GetState` not found | `sudo apt install python3-dbus python3-gi` |
 | Whisper very slow | `inference.device: cuda` (GPU) or `inference.model: tiny` (fastest CPU) |
 | `ModuleNotFoundError` | Activate venv; run `pip install -r requirements.txt` |
@@ -338,6 +338,6 @@ requirements.txt
 | `~/.config/budgie-voice/config.yaml` | User configuration |
 | `~/.config/budgie-voice/voiceprint.pt` | Enrolled speaker embedding |
 | `~/.local/share/budgie-voice/logs/budgie-voice.log` | Rotating log (5 MB × 3) |
-| `~/.local/share/budgie-voice/models/` | Whisper model weights |
+| `~/.local/share/budgie-voice/models/` | Speech models (Whisper weights, `parakeet/<model>-<precision>/`). Downloaded once, with a notification; loading is offline afterwards |
 | `~/.local/share/budgie-voice/speechbrain/` | ECAPA-TDNN speaker model |
 | `~/.local/share/budgie-voice/torch_hub/` | Silero VAD model |

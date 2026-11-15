@@ -160,6 +160,10 @@ class AudioCapture:
         loop: Running asyncio event loop for thread-safe queue inserts.
     """
 
+    def configure(self, settings: AudioSettings) -> None:
+        """Use *settings* from the next :meth:`start` on."""
+        self._settings = settings
+
     def __init__(self, settings: AudioSettings, loop: asyncio.AbstractEventLoop) -> None:
         self._settings = settings
         self._loop = loop

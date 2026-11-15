@@ -63,6 +63,15 @@ async def test_faster_whisper_capabilities() -> None:
     assert caps.supports_streaming is False  # batch decode, no partial hypotheses
 
 
+@pytest.mark.asyncio
+async def test_only_parakeet_lacks_confidence() -> None:
+    from budgie_voice.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
+    from budgie_voice.inference.backends.parakeet import ParakeetBackend  # noqa: PLC0415
+
+    assert (await FasterWhisperBackend().capabilities()).reports_confidence is True
+    assert (await ParakeetBackend().capabilities()).reports_confidence is False
+
+
 def test_faster_whisper_not_ready_before_load() -> None:
     from budgie_voice.inference.backends.faster_whisper import FasterWhisperBackend  # noqa: PLC0415
 

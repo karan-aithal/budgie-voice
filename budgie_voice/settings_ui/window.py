@@ -33,6 +33,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from budgie_voice.inference.backends.registry import available_backends, models_for
 from budgie_voice.config.settings import Settings
 
 _LOG = logging.getLogger(__name__)
@@ -140,22 +141,27 @@ class SettingsWindow(QDialog):
         fl.addRow("", self._mode_push)
         return box
 
+    def _refresh_models(self, backend: str, keep: str | None = None) -> None:
+        """Fill the model combo from the selected backend (first model if *keep* isn't one)."""
+        models = models_for(backend)
+        self._model_combo.clear()
+        self._model_combo.addItems(models)
+        if keep in models:
+            self._model_combo.setCurrentText(keep)
+
     def _inference_group(self) -> QGroupBox:
         box = QGroupBox("Inference")
         fl = QFormLayout(box)
 
-        self._model_combo = QComboBox()
-        self._model_combo.addItems([
-            "tiny", "tiny.en", "small", "small.en", "medium", "medium.en", "large-v3",
-            "nemo-parakeet-tdt-0.6b-v3", "nemo-parakeet-tdt-0.6b-v2", "nemo-parakeet-rnnt-0.6b"
-        ])
-        self._model_combo.setCurrentText(self._settings.inference.model)
-        fl.addRow("Model:", self._model_combo)
-
         self._backend_combo = QComboBox()
-        self._backend_combo.addItems(["faster_whisper", "parakeet", "nemotron", "qwen3_asr"])
+        self._backend_combo.addItems(available_backends())
         self._backend_combo.setCurrentText(self._settings.inference.backend)
         fl.addRow("Backend:", self._backend_combo)
+
+        self._model_combo = QComboBox()
+        self._backend_combo.currentTextChanged.connect(self._refresh_models)
+        self._refresh_models(self._backend_combo.currentText(), keep=self._settings.inference.model)
+        fl.addRow("Model:", self._model_combo)
 
         self._lang_edit = QLineEdit(self._settings.inference.language)
         fl.addRow("Language:", self._lang_edit)
@@ -186,6 +192,10 @@ class SettingsWindow(QDialog):
         mic_row.addWidget(self._mic_combo, stretch=1)
         mic_row.addWidget(refresh_btn)
         fl.addRow("Microphone:", mic_row)
+
+        self._denoise_chk = QCheckBox("Reduce background noise  (can clip speech; re-enroll after changing)")
+        self._denoise_chk.setChecked(self._settings.audio.denoise)
+        fl.addRow(self._denoise_chk)
 
         self._populate_mic_devices()
         return box
@@ -339,7 +349,7 @@ class SettingsWindow(QDialog):
     def _save(self) -> None:
         # Merge into whatever's already on disk instead of overwriting wholesale —
         # config.yaml can carry hand-tuned keys this dialog doesn't expose
-        # (e.g. audio.denoise, vad.aggressiveness), and a plain overwrite silently
+        # (e.g. vad.aggressiveness, audio.input_gain_pct), and a plain overwrite silently
         # discards them on the next Save.
         base: dict = {}
         if _CONFIG_PATH.exists():
@@ -351,7 +361,7 @@ class SettingsWindow(QDialog):
                 "hotkey": self._hotkey_edit.text(),
                 "mode": "toggle" if self._mode_toggle.isChecked() else "push_to_hold",
             },
-            "audio": {"devices": self._mic_devices()},
+            "audio": {"devices": self._mic_devices(), "denoise": self._denoise_chk.isChecked()},
             "inference": {
                 "model": self._model_combo.currentText(),
                 "backend": self._backend_combo.currentText(),

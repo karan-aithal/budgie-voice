@@ -56,3 +56,33 @@ async def test_hotwords_are_dictionary_then_corrections(monkeypatch, tmp_path) -
     rig.svc._refresh_hotwords()  # noqa: SLF001
     assert rig.svc._client._hotwords == "Zephyr Kubernetes"  # noqa: SLF001
     await rig.close()
+
+
+async def test_confidence_check_skipped_when_backend_does_not_report_it(monkeypatch) -> None:
+    rig = _Rig(monkeypatch)
+    rig.backend.confidence = 0.1  # far below the 0.40 threshold
+    rig.backend.reports_confidence = False
+    await rig.svc.start()
+    await rig.dictate(_frame(7))
+    assert rig.typed() == ["7"]
+    await rig.close()
+
+
+async def test_low_confidence_still_rejected_when_backend_reports_it(monkeypatch) -> None:
+    rig = _Rig(monkeypatch)
+    rig.backend.confidence = 0.1
+    await rig.svc.start()
+    await rig.dictate(_frame(7))
+    assert rig.typed() == []
+    await rig.close()
+
+
+async def test_hotwords_are_capped(monkeypatch, tmp_path) -> None:
+    rig = _Rig(monkeypatch)
+    dictionary = tmp_path / "dictionary.txt"
+    dictionary.write_text("\n".join([f"term{i}" for i in range(150)] + ["x" * 65]))
+    rig.svc._settings.learning.dictionary_path = str(dictionary)  # noqa: SLF001
+    rig.svc._refresh_hotwords()  # noqa: SLF001
+    words = rig.svc._client._hotwords.split()  # noqa: SLF001
+    assert len(words) == 100 and "x" * 65 not in words
+    await rig.close()

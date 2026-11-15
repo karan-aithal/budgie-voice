@@ -83,6 +83,28 @@ class AudioAdapter:
     # Lifecycle
     # ------------------------------------------------------------------
 
+    def configure(self, audio_settings: AudioSettings, vad_settings: VadSettings) -> None:
+        """Adopt new settings for the next session.
+
+        May load the VAD model if VAD was just enabled, so call it from an
+        executor.
+        """
+        self._audio_settings = audio_settings
+        self._capture.configure(audio_settings)
+        self._denoiser = DenoiseFilter(audio_settings.denoise, audio_settings.sample_rate)
+        if not vad_settings.enabled:
+            self._vad = None
+        elif self._vad is None:
+            self._vad = VADFilter(
+                aggressiveness=vad_settings.aggressiveness,
+                speech_pad_ms=vad_settings.speech_pad_ms,
+                sample_rate=audio_settings.sample_rate,
+                pre_roll_ms=vad_settings.pre_roll_ms,
+            )
+            self._vad.load()
+        else:
+            self._vad.configure(vad_settings.aggressiveness, vad_settings.speech_pad_ms, vad_settings.pre_roll_ms)
+
     def preload(self) -> None:
         """Load the VAD model now (blocking — run in an executor at startup)."""
         if self._vad is not None:

@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import shutil
+from pathlib import Path
 from typing import AsyncIterator
 
 import numpy as np
@@ -24,6 +26,7 @@ from budgie_voice.inference.protocol import TranscriptSegment
 
 _LOG = logging.getLogger(__name__)
 
+_MODELS_DIR = Path.home() / ".local" / "share" / "budgie-voice" / "models" / "parakeet"
 _SUPPORTED_MODELS = ["nemo-parakeet-tdt-0.6b-v3", "nemo-parakeet-tdt-0.6b-v2", "nemo-parakeet-rnnt-0.6b"]
 _SUPPORTED_LANGUAGES = ["en"]  # v3 is English-only; multilingual presets exist but untested here
 
@@ -34,6 +37,8 @@ class ParakeetBackend(InferenceBackend):
     Args:
         None — configured via :meth:`load`, matching every other backend.
     """
+
+    SUPPORTED_MODELS = _SUPPORTED_MODELS
 
     def __init__(self) -> None:
         self._model: object | None = None
@@ -112,11 +117,15 @@ class ParakeetBackend(InferenceBackend):
             supported_models=_SUPPORTED_MODELS,
             supports_streaming=False,
             supports_gpu=True,
+            reports_confidence=False,  # onnx_asr gives no score; segments carry a placeholder
         )
 
     @property
     def is_ready(self) -> bool:
         return self._model is not None
+
+    def is_cached(self, model: str, compute_type: str) -> bool:
+        return _local_dir(model, compute_type).exists()
 
     # ------------------------------------------------------------------
     # Internal
@@ -126,9 +135,16 @@ class ParakeetBackend(InferenceBackend):
         import onnx_asr  # noqa: PLC0415
 
         quantization = "int8" if compute_type == "int8" else None
+        # One directory per model + precision. onnx_asr treats an existing
+        # directory as "offline" (no network at all) and a missing one as
+        # "download into it", so a started session never touches the network.
+        local = _local_dir(model, compute_type)
+        fresh = not local.exists()
         try:
-            self._model = onnx_asr.load_model(model, quantization=quantization)
+            self._model = onnx_asr.load_model(model, local, quantization=quantization)
         except Exception as exc:
+            if fresh:  # an interrupted download must not poison later offline loads
+                shutil.rmtree(local, ignore_errors=True)
             raise RuntimeError(f"Failed to load Parakeet model '{model}': {exc}") from exc
 
     def _transcribe_sync(self, audio: np.ndarray, language: str) -> TranscriptSegment | None:
@@ -147,3 +163,7 @@ class ParakeetBackend(InferenceBackend):
             is_final=True,
             language=language,
         )
+
+
+def _local_dir(model: str, compute_type: str) -> Path:
+    return _MODELS_DIR / f"{model}-{'int8' if compute_type == 'int8' else 'fp32'}"

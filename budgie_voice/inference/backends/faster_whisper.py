@@ -14,6 +14,7 @@ from budgie_voice.inference.protocol import TranscriptSegment
 
 _LOG = logging.getLogger(__name__)
 
+_CACHE_DIR = Path.home() / ".local" / "share" / "budgie-voice" / "models"
 _SUPPORTED_MODELS = ["tiny", "tiny.en", "small", "small.en", "medium", "medium.en", "large-v3"]
 _SUPPORTED_LANGUAGES = ["en", "fr", "de", "es", "it", "pt", "nl", "ru", "zh", "ja", "ko", "ar"]
 
@@ -25,6 +26,8 @@ class FasterWhisperBackend(InferenceBackend):
     event loop. The backend accumulates all audio frames for a speech
     turn and transcribes them as a single batch.
     """
+
+    SUPPORTED_MODELS = _SUPPORTED_MODELS
 
     def __init__(self) -> None:
         self._model: object | None = None
@@ -118,6 +121,15 @@ class FasterWhisperBackend(InferenceBackend):
     def is_ready(self) -> bool:
         return self._model is not None
 
+    def is_cached(self, model: str, compute_type: str) -> bool:  # noqa: ARG002
+        from faster_whisper.utils import download_model  # noqa: PLC0415
+
+        try:
+            download_model(model, local_files_only=True, cache_dir=str(_CACHE_DIR))
+        except Exception:  # noqa: BLE001 — any failure means "not on disk"
+            return False
+        return True
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -134,7 +146,7 @@ class FasterWhisperBackend(InferenceBackend):
             except ImportError:
                 resolved_device = "cpu"
 
-        cache = Path.home() / ".local" / "share" / "budgie-voice" / "models"
+        cache = _CACHE_DIR
         cache.mkdir(parents=True, exist_ok=True)
 
         try:

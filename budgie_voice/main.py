@@ -1,4 +1,4 @@
-"""Budgie Phase 4 entry point.
+"""Budgie entry point.
 
 Adds system tray, low-confidence indicator, secure-field blocking,
 and Settings UI.  Uses qasync to run asyncio inside the Qt event loop.
@@ -20,7 +20,8 @@ from budgie_voice.audio.adapter import AudioAdapter
 from budgie_voice.audio.spectrum import AudioLevel
 from budgie_voice.config.settings import Settings, load_settings
 from budgie_voice.dbus.service import BudgieDBusService
-from budgie_voice.inference.backends.registry import get_backend
+from budgie_voice.inference.backends.base import InferenceBackend
+from budgie_voice.inference.backends.registry import get_backend, resolve
 from budgie_voice.inference.client import InferenceClient
 from budgie_voice.inference.server import InferenceServer
 from budgie_voice.injection.base import TextOutputBackend
@@ -32,6 +33,7 @@ from budgie_voice.postprocessing.pipeline import PostProcessingPipeline
 from budgie_voice.speaker.verifier import SpeakerVerifier
 from budgie_voice.utils.aio import dispatch
 from budgie_voice.utils.logging_setup import setup_logging
+from budgie_voice.utils.notify import notify
 
 _LOG = logging.getLogger(__name__)
 
@@ -59,23 +61,20 @@ async def main_async() -> bool:
     setup_logging(settings.logging.level)
     loop = asyncio.get_running_loop()
 
-    _LOG.info("Budgie starting (Phase 4)")
+    _LOG.info("Budgie starting")
 
     # ------------------------------------------------------------------
     # Inference backend + server
     # ------------------------------------------------------------------
-    backend = get_backend(settings.inference.backend)
-    await backend.load(
-        settings.inference.model,
-        settings.inference.device,
-        settings.inference.compute_type,
-        beam_size=settings.inference.beam_size,
-        no_speech_threshold=settings.inference.no_speech_threshold,
-        log_prob_threshold=settings.inference.log_prob_threshold,
-        compression_ratio_threshold=settings.inference.compression_ratio_threshold,
-    )
+    inf = settings.inference
+    backend_name, model, problem = resolve(inf.backend, inf.model)
+    if problem:  # never crash-loop under systemd over a typo in config.yaml
+        _LOG.error("Inference config invalid: %s", problem)
+        await notify(settings, f"⚠️ {problem}")
+    active_key = _backend_key(inf, backend_name, model)
+    backend = await _load_backend(settings, backend_name, model)
 
-    server = InferenceServer(backend, port=settings.inference.server_port, min_turn_s=settings.inference.min_turn_s)
+    server = InferenceServer(backend, port=inf.server_port, min_turn_s=inf.min_turn_s)
     server.start()
     await asyncio.sleep(0.3)
 
@@ -91,22 +90,8 @@ async def main_async() -> bool:
     except Exception as exc:  # noqa: BLE001 — open() retries the load per session
         _LOG.warning("VAD preload failed (%s) — will retry on first session", exc)
 
-    pp = settings.postprocessing
-    pipeline = PostProcessingPipeline(
-        normalize_numbers=pp.normalize_numbers,
-        auto_capitalize=pp.auto_capitalize,
-        punctuation_commands=pp.punctuation_commands,
-        language_cleanup=pp.language_cleanup,
-    )
-
-    injector: TextOutputBackend
-    try:
-        injector = select_backend(settings.injection.backend, delay_ms=settings.injection.delay_ms)
-    except Exception as exc:
-        _LOG.warning("Injection backend unavailable (%s) — null fallback", exc)
-        injector = _NullBackend()
-    if os.environ.get("XDG_SESSION_TYPE") == "wayland" and settings.injection.block_secure_fields:
-        _LOG.warning("Secure-field detection is unavailable on Wayland — dictation is not blocked in password fields")
+    pipeline = _make_pipeline(settings)
+    injector = _make_injector(settings)
 
     # ------------------------------------------------------------------
     # Speaker verifier
@@ -150,6 +135,7 @@ async def main_async() -> bool:
     # ------------------------------------------------------------------
     # DictationService
     # ------------------------------------------------------------------
+    injector_holder = {"injector": injector}
     dict_svc = DictationService(
         adapter=adapter, client=client, pipeline=pipeline,
         injector=injector, verifier=verifier, settings=settings,
@@ -160,40 +146,70 @@ async def main_async() -> bool:
     # ------------------------------------------------------------------
     # DBus service (with settings reload)
     # ------------------------------------------------------------------
-    def _reload_settings() -> None:
-        old_inf = dict_svc._settings.inference
+    reload_lock = asyncio.Lock()
+
+    async def _reload() -> None:
+        """Re-read config.yaml and apply it to the running app, on the loop.
+
+        Reloads run one at a time: a model load takes a minute, and an
+        overlapping reload would compare against the not-yet-swapped model, so
+        whichever finished last would win regardless of what config.yaml says.
+
+        Each part is applied independently: a failure in one is reported and
+        leaves the rest of the reload (and the previous state of that part) intact.
+        """
+        async with reload_lock:
+            await _reload_locked()
+
+    async def _reload_locked() -> None:
+        nonlocal active_key
+        old = dict_svc.settings
         new = load_settings()
-        dict_svc._settings = new
-        # Propagate new audio settings into the live adapter + capture
-        adapter._audio_settings = new.audio
-        adapter._capture._settings = new.audio
-        _LOG.info("Settings reloaded via DBus")
+        problems: list[str] = []
 
-        new_inf = new.inference
-        if (
-            old_inf.model != new_inf.model
-            or old_inf.device != new_inf.device
-            or old_inf.compute_type != new_inf.compute_type
-            or old_inf.backend != new_inf.backend
-        ):
-            _LOG.info(
-                "Inference settings changed (%s → %s) — hot-reloading backend",
-                old_inf.model, new_inf.model,
-            )
-            dispatch(
-                server.reload_backend(
-                    new_inf.model,
-                    new_inf.device,
-                    new_inf.compute_type,
-                    beam_size=new_inf.beam_size,
-                    no_speech_threshold=new_inf.no_speech_threshold,
-                    log_prob_threshold=new_inf.log_prob_threshold,
-                    compression_ratio_threshold=new_inf.compression_ratio_threshold,
-                ),
-                loop,
-            )
+        backend_name, model, problem = resolve(new.inference.backend, new.inference.model)
+        if problem:
+            problems.append(problem)
+            _LOG.error("Inference config invalid: %s", problem)
+        key = _backend_key(new.inference, backend_name, model)
+        if key != active_key:
+            _LOG.info("Inference settings changed (%s) — loading new backend", model)
+            try:
+                server.swap_backend(await _load_backend(new, backend_name, model))
+                active_key = key
+            except Exception as exc:  # noqa: BLE001 — old backend keeps serving
+                _LOG.exception("Backend reload failed")
+                problems.append(f"Could not load {model} ({type(exc).__name__}) — keeping the previous model")
 
-    dbus_svc = BudgieDBusService(dict_svc, loop, on_reload=_reload_settings)
+        if (new.injection.backend, new.injection.delay_ms) != (old.injection.backend, old.injection.delay_ms):
+            new_injector = _make_injector(new)
+        else:
+            new_injector = injector_holder["injector"]
+        injector_holder["injector"] = new_injector
+        dict_svc.apply(new, _make_pipeline(new), new_injector)
+
+        try:
+            await loop.run_in_executor(None, adapter.configure, new.audio, new.vad)
+        except Exception as exc:  # noqa: BLE001
+            _LOG.exception("Audio reload failed")
+            problems.append(f"Audio settings not applied ({type(exc).__name__})")
+        hotkey.apply(new.activation)
+        verifier.set_threshold(new.speaker.threshold)
+        client.set_language(new.inference.language)
+
+        restart_only = [
+            name for name, changed in (
+                ("inference.server_port", new.inference.server_port != old.inference.server_port),
+                ("logging.level", new.logging.level != old.logging.level),
+            ) if changed
+        ]
+        msg = "Settings reloaded"
+        if restart_only:
+            msg += f" — restart needed for {', '.join(restart_only)}"
+        _LOG.info("%s", msg)
+        await dict_svc.notify("⚠️ " + "; ".join(problems) if problems else msg)
+
+    dbus_svc = BudgieDBusService(dict_svc, loop, on_reload=lambda: dispatch(_reload(), loop))
     _state_cbs.append(lambda s: dbus_svc.emit_state_changed(str(s)))
     dbus_svc.start()
 
@@ -226,7 +242,7 @@ async def main_async() -> bool:
         tray = TrayIcon(
             on_toggle=lambda: dict_svc.toggle("tray"),
             on_enroll=lambda: EnrollmentWizard(verifier).show(),
-            on_settings=lambda: SettingsWindow(dict_svc._settings).show(),
+            on_settings=lambda: SettingsWindow(dict_svc.settings).show(),
             on_quit=stop_event.set,
             on_restart=_request_restart,
             get_last_text=lambda: dict_svc.last_transcript,
@@ -308,6 +324,51 @@ async def main_async() -> bool:
         _LOG.info("Shutdown complete")
 
     return restart_requested
+
+
+def _backend_key(inf: object, backend: str, model: str) -> tuple:
+    """Everything that requires loading a new backend instance when it changes."""
+    return (
+        backend, model, inf.device, inf.compute_type, inf.beam_size,  # type: ignore[attr-defined]
+        inf.no_speech_threshold, inf.log_prob_threshold, inf.compression_ratio_threshold,  # type: ignore[attr-defined]
+    )
+
+
+async def _load_backend(settings: Settings, name: str, model: str) -> InferenceBackend:
+    """Load *model* on backend *name*, telling the user first if that means a download."""
+    inf = settings.inference
+    backend = get_backend(name)
+    if not backend.is_cached(model, inf.compute_type):
+        await notify(settings, f"Downloading {model} (first run only) — this can take a minute")
+    await backend.load(
+        model, inf.device, inf.compute_type,
+        beam_size=inf.beam_size,
+        no_speech_threshold=inf.no_speech_threshold,
+        log_prob_threshold=inf.log_prob_threshold,
+        compression_ratio_threshold=inf.compression_ratio_threshold,
+    )
+    return backend
+
+
+def _make_pipeline(settings: Settings) -> PostProcessingPipeline:
+    pp = settings.postprocessing
+    return PostProcessingPipeline(
+        normalize_numbers=pp.normalize_numbers,
+        auto_capitalize=pp.auto_capitalize,
+        punctuation_commands=pp.punctuation_commands,
+        language_cleanup=pp.language_cleanup,
+    )
+
+
+def _make_injector(settings: Settings) -> TextOutputBackend:
+    try:
+        injector = select_backend(settings.injection.backend, delay_ms=settings.injection.delay_ms)
+    except Exception as exc:  # noqa: BLE001
+        _LOG.warning("Injection backend unavailable (%s) — null fallback", exc)
+        return _NullBackend()
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland" and settings.injection.block_secure_fields:
+        _LOG.warning("Secure-field detection is unavailable on Wayland — dictation is not blocked in password fields")
+    return injector
 
 
 # ---------------------------------------------------------------------------

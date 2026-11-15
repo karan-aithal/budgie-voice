@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import subprocess
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Callable
@@ -24,6 +23,7 @@ from budgie_voice.orchestrator.corrections import CorrectionMemory
 from budgie_voice.orchestrator.vocab import PersonalVocab
 from budgie_voice.postprocessing.pipeline import PostProcessingPipeline
 from budgie_voice.utils.exceptions import BudgieSessionError
+from budgie_voice.utils.notify import notify as _notify  # tests patch this name
 
 if TYPE_CHECKING:
     from budgie_voice.inference.client import InferenceClient
@@ -83,6 +83,27 @@ class DictationService:
         self._corrections: CorrectionMemory | None = None
         if settings.learning.corrections_enabled:
             self._corrections = CorrectionMemory(Path(settings.learning.corrections_path).expanduser())
+        self._refresh_hotwords()
+
+    @property
+    def settings(self) -> Settings:
+        return self._settings
+
+    async def notify(self, message: str) -> None:
+        """Desktop notification, for callers outside the service (reload, startup)."""
+        await _notify(self._settings, message)
+
+    def apply(
+        self, settings: Settings, pipeline: PostProcessingPipeline, injector: TextOutputBackend
+    ) -> None:
+        """Swap in reloaded settings, post-processing pipeline and injector.
+
+        Applies from the next session; main builds the pipeline and injector,
+        so this class stays policy-only.
+        """
+        self._settings = settings
+        self._pipeline = pipeline
+        self._injector = injector
         self._refresh_hotwords()
 
     # ------------------------------------------------------------------
@@ -310,14 +331,16 @@ class DictationService:
                 async for seg in self._client.receive_segments():
                     if not self._session.is_active or not seg.is_final:
                         continue
-                    if seg.confidence < threshold:
+                    # confidence is None for backends that do not measure it (Parakeet)
+                    if seg.confidence is not None and seg.confidence < threshold:
                         _LOG.info("Segment rejected conf=%.2f < %.2f (%d chars)", seg.confidence, threshold, len(seg.text))
                         _LOG.debug("Rejected segment: %r", seg.text[:40])
                         await _notify(self._settings, self._settings.notifications.low_confidence_message)
                         if self._on_low_confidence is not None:
                             self._on_low_confidence()
                         continue
-                    _LOG.info("Segment accepted conf=%.2f (%d chars)", seg.confidence, len(seg.text))
+                    conf = "n/a" if seg.confidence is None else f"{seg.confidence:.2f}"
+                    _LOG.info("Segment accepted conf=%s (%d chars)", conf, len(seg.text))
                     _LOG.debug("Accepted segment: %r", seg.text[:60])
                     self._pending.append(seg)
                 # Iteration ending without an error means the socket closed
@@ -344,7 +367,11 @@ class DictationService:
             terms += self._corrections.targets()
         if self._vocab is not None:
             terms += (self._vocab.hotwords() or "").split()
-        self._client.set_hotwords(" ".join(dict.fromkeys(terms)) or None)
+        # De-duplicate, then cap: at most 100 terms of at most 64 characters each.
+        kept = [t for t in dict.fromkeys(terms) if len(t) <= _MAX_HOTWORD_CHARS][:_MAX_HOTWORDS]
+        if len(kept) < len(set(terms)):
+            _LOG.debug("Hotwords capped: kept %d of %d terms", len(kept), len(set(terms)))
+        self._client.set_hotwords(" ".join(kept) or None)
 
     def _on_mic_silent(self, label: str) -> None:
         asyncio.ensure_future(_notify(self._settings, f"⚠️ Mic silent: {label}"))
@@ -369,6 +396,10 @@ class DictationService:
         return is_me
 
 
+_MAX_HOTWORDS = 100
+_MAX_HOTWORD_CHARS = 64
+
+
 def _read_terms(path: Path) -> list[str]:
     """One term per line; blank lines and ``#`` comments ignored. [] if unreadable."""
     try:
@@ -376,17 +407,3 @@ def _read_terms(path: Path) -> list[str]:
     except OSError:
         return []
     return [t for line in lines if (t := line.strip()) and not t.startswith("#")]
-
-
-async def _notify(settings: Settings, message: str) -> None:
-    try:
-        await asyncio.get_running_loop().run_in_executor(
-            None,
-            lambda: subprocess.run(
-                [settings.notifications.tool, "Budgie", message],
-                capture_output=True,
-                timeout=3,
-            ),
-        )
-    except Exception:
-        pass

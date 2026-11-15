@@ -45,9 +45,7 @@ ExecStart=${VENV_PYTHON} -m budgie_voice.main
 WorkingDirectory=${PROJECT_DIR}
 Restart=on-failure
 RestartSec=5
-Environment=DISPLAY=:0
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
-Environment=IBUS_ADDRESS_FILE=%h/.config/ibus/bus
 
 [Install]
 WantedBy=graphical-session.target
@@ -57,6 +55,15 @@ UNIT
 echo "[3/3] Enabling and starting budgie-voice.service …"
 systemctl --user daemon-reload
 systemctl --user enable --now budgie-voice
+
+# The unit sets no DISPLAY/WAYLAND_DISPLAY: it inherits the graphical session's
+# environment from the systemd user manager. If that is empty, typing and the
+# tray fail, so say how to fix it.
+if ! systemctl --user show-environment | grep -qE '^(DISPLAY|WAYLAND_DISPLAY)='; then
+    echo "warning: the systemd user manager has no DISPLAY/WAYLAND_DISPLAY. Run:" >&2
+    echo "  systemctl --user import-environment DISPLAY XAUTHORITY WAYLAND_DISPLAY XDG_SESSION_TYPE" >&2
+    echo "  systemctl --user restart budgie-voice" >&2
+fi
 
 echo ""
 echo "Budgie installed and running."

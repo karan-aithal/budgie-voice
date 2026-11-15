@@ -98,30 +98,25 @@ class InferenceServer:
             self._uvicorn.should_exit = True
         _LOG.info("InferenceServer stopping")
 
-    async def reload_backend(
-        self,
-        model: str,
-        device: str,
-        compute_type: str,
-        beam_size: int = 5,
-        no_speech_threshold: float = 0.6,
-        log_prob_threshold: float = -1.0,
-        compression_ratio_threshold: float = 2.4,
-    ) -> None:
-        """Hot-swap the backend model without restarting the server.
+    def swap_backend(self, new_backend: InferenceBackend) -> None:
+        """Route new requests/turns to an already-loaded backend.
 
-        In-flight transcriptions continue on the old model object; the new
-        model is assigned atomically when loading completes.
+        Turns in flight keep the backend they started on; the old one is
+        garbage-collected once they finish.
         """
-        _LOG.info("Hot-reloading backend: %s (%s / %s) beam=%d", model, device, compute_type, beam_size)
-        await self._backend.load(
-            model, device, compute_type,
-            beam_size=beam_size,
-            no_speech_threshold=no_speech_threshold,
-            log_prob_threshold=log_prob_threshold,
-            compression_ratio_threshold=compression_ratio_threshold,
-        )
-        _LOG.info("Backend hot-reload complete: %s", model)
+        self._backend = new_backend
+
+    async def capabilities(self):  # noqa: ANN201
+        """Capabilities of the *current* backend (same swap rule as transcribe_stream)."""
+        return await self._backend.capabilities()
+
+    def transcribe_stream(self, audio_frames, language, hotwords=None):  # noqa: ANN001, ANN201
+        """Delegate to the *current* backend, so a long-lived socket sees swaps.
+
+        Lets ``_handle_ws`` take the server where it takes a backend: each turn
+        looks the backend up when it starts, not when the socket connected.
+        """
+        return self._backend.transcribe_stream(audio_frames, language, hotwords)
 
     # ------------------------------------------------------------------
     # FastAPI app
@@ -129,11 +124,10 @@ class InferenceServer:
 
     def _build_app(self) -> FastAPI:
         app = FastAPI(title="Budgie Inference Server", version="1.0")
-        backend = self._backend
 
         @app.get("/capabilities")
         async def capabilities() -> dict:
-            caps = await backend.capabilities()
+            caps = await self._backend.capabilities()
             return {
                 "version": caps.version,
                 "backends": caps.supported_models,
@@ -141,6 +135,7 @@ class InferenceServer:
                 "models": caps.supported_models,
                 "supports_streaming": caps.supports_streaming,
                 "supports_gpu": caps.supports_gpu,
+                "reports_confidence": caps.reports_confidence,
             }
 
         @app.post("/v1/audio/transcriptions")
@@ -161,7 +156,7 @@ class InferenceServer:
 
             texts = [
                 seg.text
-                async for seg in backend.transcribe_stream(_one(), language)
+                async for seg in self._backend.transcribe_stream(_one(), language)
                 if seg.is_final and seg.text
             ]
             return {"text": " ".join(texts)}
@@ -171,7 +166,7 @@ class InferenceServer:
             await ws.accept()
             _LOG.debug("WebSocket client connected")
             try:
-                await _handle_ws(ws, backend, self._min_turn_s)
+                await _handle_ws(ws, self, self._min_turn_s)  # type: ignore[arg-type]  # duck-typed backend
             except WebSocketDisconnect:
                 _LOG.debug("WebSocket client disconnected")
             except Exception as exc:  # noqa: BLE001
@@ -229,13 +224,14 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend, min_turn_s: float
             yield item
 
     async def _run_turn(queue: asyncio.Queue[np.ndarray | None], lang: str, hw: str | None) -> None:
+        reports_confidence = (await backend.capabilities()).reports_confidence
         async for seg in backend.transcribe_stream(_frame_source(queue), lang, hw):
             await ws.send_text(
                 json.dumps(
                     {
                         "type": "transcript_segment",
                         "text": seg.text,
-                        "confidence": seg.confidence,
+                        "confidence": seg.confidence if reports_confidence else None,
                         "is_final": seg.is_final,
                         "language": seg.language,
                     }

@@ -17,7 +17,7 @@ audio:
   input_gain_pct: null    # BT mic gain 50-150 applied when a bt: device is used; null = leave alone
   sample_rate: 16000
   chunk_duration_ms: 30
-  denoise: true
+  denoise: false          # noisereduce; can clip speech on 30 ms chunks. Re-enroll after changing
 
 vad:
   enabled: true

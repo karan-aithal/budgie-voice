@@ -35,6 +35,10 @@ class InferenceClient:
         # id of an unacknowledged reset; segments are dropped until it is acked
         self._reset_id: int | None = None
 
+    def set_language(self, language: str) -> None:
+        """Language sent with every frame; takes effect from the next one."""
+        self._language = language
+
     def set_hotwords(self, hotwords: str | None) -> None:
         """Set personal-vocabulary hotwords sent with each frame."""
         self._hotwords = hotwords
@@ -161,7 +165,7 @@ class InferenceClient:
             elif kind == "transcript_segment" and self._reset_id is None:
                 yield TranscriptSegment(
                     text=msg["text"],
-                    confidence=msg["confidence"],
+                    confidence=msg.get("confidence"),
                     is_final=msg["is_final"],
                     language=msg["language"],
                 )

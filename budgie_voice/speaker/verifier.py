@@ -43,6 +43,10 @@ class SpeakerVerifier:
         self._model: object | None = None
         self._voiceprint: np.ndarray | None = None
 
+    def set_threshold(self, threshold: float) -> None:
+        """Cosine-similarity cutoff used from the next verification on."""
+        self._threshold = threshold
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------

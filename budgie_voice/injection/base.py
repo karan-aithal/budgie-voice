@@ -48,10 +48,17 @@ def run_checked(cmd: list[str], timeout: float, what: str) -> None:
     """Run *cmd*; raise :exc:`BudgieInjectionError` on a timeout, spawn failure or non-zero exit."""
     try:
         result = subprocess.run(cmd, check=False, capture_output=True, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise BudgieInjectionError(f"{what} failed: {exc}") from exc
+    except subprocess.TimeoutExpired:
+        # Not str(exc) and not chained: both carry the command line, i.e. the typed text.
+        raise BudgieInjectionError(f"{what} timed out after {timeout:.0f}s") from None
+    except OSError as exc:
+        raise BudgieInjectionError(f"{what} failed: {type(exc).__name__}: {exc.strerror}") from None
     if result.returncode != 0:
-        stderr = result.stderr.decode("utf-8", "replace").strip()
+        stderr = result.stderr.decode("utf-8", "replace")
+        for arg in cmd[1:]:  # a tool may echo what it was asked to type; never pass that on
+            if len(arg) > 2:
+                stderr = stderr.replace(arg, "<text>")
+        stderr = stderr.strip()[:200]
         raise BudgieInjectionError(f"{what} exited {result.returncode}: {stderr}")
 
 

@@ -50,12 +50,13 @@ class TranscriptSegment:
 
     Attributes:
         text: Recognised text (may be partial if ``is_final=False``).
-        confidence: Normalised confidence in [0.0, 1.0].
+        confidence: Normalised confidence in [0.0, 1.0]; ``None`` when the backend
+            does not measure it (``reports_confidence`` is False).
         is_final: ``True`` = committed; ``False`` = live partial hypothesis.
         language: BCP-47 language tag detected by the model.
     """
 
     text: str
-    confidence: float
+    confidence: float | None
     is_final: bool
     language: str

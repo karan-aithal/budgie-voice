@@ -13,6 +13,10 @@ from budgie_voice.audio.vad import VADFilter
 from budgie_voice.config.settings import AudioSettings, VadSettings
 
 
+def test_denoise_is_opt_in() -> None:
+    assert AudioSettings().denoise is False
+
+
 class _Score:
     def __init__(self, value: float) -> None:
         self._value = value

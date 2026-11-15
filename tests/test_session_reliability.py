@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 
 from budgie_voice.config.settings import Settings
+from budgie_voice.inference.backends.base import BackendCapabilities
 from budgie_voice.inference.client import InferenceClient
 from budgie_voice.inference.protocol import AudioFrame, TranscriptSegment
 from budgie_voice.inference.server import _handle_ws
@@ -52,6 +53,12 @@ class _Backend:
         self.turns = 0
         self.script: list[str] = []  # if set, one entry is spoken per turn instead
 
+    reports_confidence = True
+    confidence = 0.9
+
+    async def capabilities(self) -> BackendCapabilities:
+        return BackendCapabilities("1.2", ["en"], ["x"], False, False, self.reports_confidence)
+
     async def transcribe_stream(self, frames, language, hotwords=None):
         heard: set[int] = set()
         async for frame in frames:
@@ -59,7 +66,7 @@ class _Backend:
         await self.gate.wait()
         self.turns += 1
         text = self.script.pop(0) if self.script else " ".join(map(str, sorted(heard)))
-        yield TranscriptSegment(text, 0.9, True, language)
+        yield TranscriptSegment(text, self.confidence, True, language)
 
 
 class _Adapter:

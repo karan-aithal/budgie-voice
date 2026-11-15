@@ -106,6 +106,19 @@ class HotkeyManager:
             self._settings.hotkey,
         )
 
+    def apply(self, settings: ActivationSettings) -> None:
+        """Adopt new activation settings; restart the listener only if needed."""
+        old = self._settings
+        self._settings = settings
+        self._hotkey = _parse_hotkey(settings.hotkey)
+        if (old.hotkey, old.mode, old.trigger) == (settings.hotkey, settings.mode, settings.trigger):
+            return
+        self.stop()
+        self._pressed.clear()
+        self._push_active = False
+        if settings.resolved_trigger() == "pynput":
+            self.start()
+
     def stop(self) -> None:
         """Stop the listener and release the background thread."""
         if self._listener is not None:

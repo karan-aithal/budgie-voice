@@ -24,6 +24,8 @@ Before any change:
    decides segmentation and transcription, Speech Orchestrator is policy only (no audio
    processing), User Interaction owns hotkey, tray, widgets and injection.
 3. Read every file the phase touches, and grep all callers of any function you change.
+4. Verify each listed problem in the code first. If it is already fixed, say so in one line
+   and skip it; never rebuild finished work.
 
 Hard constraints, every phase:
 - Audio never touches disk. Transcript text is never logged at INFO or above (DEBUG only).
@@ -35,7 +37,7 @@ Hard constraints, every phase:
   changes) and wait for my OK.
 - Where a phase says "Ask first", stop and ask me. Do not guess.
 - Each behavioural fix gets one small pytest test that fails without the fix. No fixtures
-  frameworks, no per-function suites. The existing 82 tests must stay green:
+  frameworks, no per-function suites. The existing 118 tests (current count) must stay green:
   .venv/bin/python -m pytest -q
 - You cannot speak into the microphone. For anything needing real audio or a real desktop,
   give me an exact manual check (what to do, which log line to expect in
@@ -49,262 +51,141 @@ out-of-scope findings, then the line "✅ Phase <n> complete".
 
 ---
 
-## Phase 1 — Session reliability (no lost text, no stuck sessions)
+## Phase 1 — Session reliability (already built: verify only)
 
 ```
-Phase 1 only. Make a dictation session impossible to lose or wedge.
+Phase 1 only. This was implemented earlier; do NOT rebuild it. Verify each item in the code
+and tests/test_session_reliability.py, one line each, and fix only what is missing:
+a. flush/reset messages on /ws/transcribe, protocol version 2, client waits for "flushed"
+   within inference.finalize_timeout_s; no fixed sleep in _stop_session.
+b. cancel sends reset; a second session never receives the first session's audio.
+c. A failure in start or stop returns the session to IDLE through ERROR, with a traceback in
+   the log and a notification.
+d. utils/aio.dispatch is used at every run_coroutine_threadsafe call site.
+e. The state callback fires on every transition (tray and overlay show transcribing and
+   completed).
+f. The capture queue is drained when a session opens.
+g. No transcript text in log calls at INFO or above.
 
-Problems to fix (verify each in the code first, tell me if any is not real):
-a. Stopping sends no end-of-speech. DictationService._stop_session cancels the send task,
-   sleeps 0.4 s and reads self._pending. If the last VAD turn was still open, it is never
-   transcribed, stays in the server's per-connection frame_queue (inference/server.py
-   _handle_ws) and is prepended to the NEXT session. A turn that takes longer than 0.4 s
-   to transcribe is dropped.
-b. Cancel leaves the same stale audio in the server queue.
-c. Any exception in _start_session (after to_starting) or in _stop_session (after
-   to_finalizing) leaves the state machine in STARTING or FINALIZING forever, because
-   toggle() then calls _stop_session, which raises BudgieSessionError and returns.
-d. Coroutines dispatched with asyncio.run_coroutine_threadsafe (hotkey, DBus, tray, cancel
-   button) never have their result checked, so their exceptions vanish without a log line.
-e. State callbacks fire only at RECORDING and at the final IDLE. FINALIZING, COMPLETED,
-   CANCELLED and ERROR never reach the tray or the recorder overlay, so the overlay shows
-   "recording" while transcription and the preview are running.
-f. The capture queue is not drained between sessions; leftover chunks from the previous
-   session are consumed at the start of the next.
-g. dictation_service.py logs transcript text at INFO ("Injecting", "Segment accepted",
-   "Segment rejected"). That violates the logging rule in utils/logging_setup.py.
+One new item, check it first and tell me what happens today: if the microphone stream dies
+after audio was already accepted, the accepted audio must still be flushed and transcribed,
+then the user is told audio was lost. Fix only if it currently drops the text.
 
-Deliver:
-- Protocol: two new client-to-server messages on /ws/transcribe and one reply.
-  "flush" (with an id): server closes the open turn if there is one, waits for its
-  transcription, sends any segments, then replies "flushed" with the same id.
-  "reset": server discards the open turn without transcribing.
-  Bump the protocol version and update inference/protocol.py docs and the client.
-- _stop_session: send flush, await the matching "flushed" with a timeout taken from a new
-  setting inference.finalize_timeout_s (default 15), then read segments. Remove the fixed
-  sleep. On timeout: notify the user, go to ERROR then IDLE, inject nothing.
-- _cancel_session: send reset.
-- Wrap start and stop so that any failure closes the adapter, logs the exception with
-  traceback, shows a desktop notification, and returns the session to IDLE through ERROR.
-  Add the missing to_error transition to DictationSession if needed.
-- One shared helper for run_coroutine_threadsafe that attaches a done-callback logging
-  exceptions; use it at every existing call site.
-- Fire the state callback on every transition. Simplest correct place wins; tell me where
-  you put it and why.
-- Drain the capture queue when a session opens.
-- Move transcript text in log calls to DEBUG; keep confidence, length and timing at INFO.
-
-Do not change VAD, segmentation policy, injection or settings UI in this phase.
-
-Tests (minimum): stop with an open turn yields its text; a second session does not
-receive the first session's audio; adapter.open raising leaves state IDLE and a later
-toggle starts normally; injector raising leaves state IDLE; cancel then start is clean.
-
-Manual check for me: dictate one sentence and press the hotkey the instant I stop
-talking, five times in a row. Every sentence must appear whole, none must leak into the
-next. Tray and overlay must show transcribing, then completed.
-
-Done when: tests green, and the 0.4 s sleep is gone.
+Done when: the checklist is reported, tests green, "✅ Phase 1 complete".
 ```
 
 ---
 
-## Phase 2 — Audio front end (VAD correctness, no UI freezes)
+## Phase 2 — Finish audio front end (denoise opt-in)
 
 ```
-Phase 2 only. Fix the capture and VAD chain.
+Phase 2 only. Most of the audio front end is already built; finish it.
 
-Problems to fix (verify first):
-a. Chunks are 30 ms = 480 samples, Silero needs 512. VADFilter.is_speech zero-pads every
-   chunk, which feeds the stateful model discontinuous audio.
-b. No pre-roll: everything before the first chunk that crosses the threshold is dropped,
-   clipping word onsets.
-c. The Silero model's internal state is not reset between sessions.
-d. AudioAdapter.open() runs on the Qt/asyncio loop: pactl calls (up to several seconds on
-   Bluetooth) and the first Silero load (torch.hub, may hit the network). VAD inference
-   and denoise also run on that loop for every chunk.
-e. noisereduce runs spectral gating on isolated 30 ms chunks. On my headset it reduced
-   real speech to silence, so it is already off in my config.
-f. Bluetooth mic gain has no config knob; I re-apply it by hand with
-   pactl set-source-volume.
+Verify first, one line each, and do NOT redo any that is already true:
+a. VADFilter re-buffers to exact 512-sample windows (audio/vad.py).
+b. Pre-roll exists as vad.pre_roll_ms (default 300).
+c. VADFilter.reset() resets the Silero state; AudioAdapter.open() calls it via load().
+d. adapter.preload() runs in an executor at startup; adapter.open() and close() run in
+   an executor from DictationService.
+f. audio.input_gain_pct is clamped to 50-150 and applied once where the BT source is pinned
+   (audio/capture.py). The "Session audio stats" line has windows and preroll_chunks.
+If any of these is NOT true, tell me and fix only that item.
 
-Deliver:
-- VADFilter re-buffers internally to exact 512-sample windows regardless of chunk size.
-  No padding inside a stream.
-- Pre-roll ring buffer, new setting vad.pre_roll_ms (default 300), emitted ahead of the
-  first speech chunk of each turn.
-- Reset model state when a session opens.
-- Load the VAD model at application startup, in an executor, not on first hotkey press.
-- Run the blocking parts of adapter.open() (and close, if it blocks) in an executor.
-  Keep the open cue ordering comment in adapter.py true: cue before the BT profile switch.
-- Remove noisereduce: DenoiseFilter, the audio.denoise setting, the requirement, the
-  settings UI control, README and config.yaml.example entries. An existing config that
-  still has audio.denoise must load without error (the unknown-key warning is fine).
-  Check budgie_voice/speaker/enroller.py: enrollment must run through the same processing as
-  runtime audio. Tell me whether I need to re-enroll.
-- New setting audio.input_gain_pct (default null = leave alone). When set and the device
-  is a "bt:" card, apply it with pactl set-source-volume once, where the BT source is
-  pinned. Clamp to 50-150 and log the value.
-- Keep the "Session audio stats" log line and add the pre-roll and window counts.
+Still to do:
+1. noisereduce stays, but opt-in: AudioSettings.denoise defaults to False (it gated isolated
+   30 ms chunks and turned real speech into silence). Add one checkbox in the settings UI
+   audio group, saved to audio.denoise. README and config.yaml.example show the new default
+   and the warning. Do not delete denoiser.py or the requirement.
+2. Enrollment (speaker/_workers.py) uses the same audio.denoise setting as runtime, so
+   enroll and runtime always match. Say so in the checkbox label: re-enroll after changing.
+   My config already had denoise off, so I do not need to re-enroll.
+3. Conditional: time VADFilter.process per chunk. Measured p95 0.28 ms, so leave VAD on the
+   event loop. Move it only if a later measurement exceeds about 5 ms.
 
-Ask first: whether to raise the default vad.speech_pad_ms. Phase 3 changes how turns are
-closed, so propose a value only if it still matters after reading Phase 3.
+Do not change speech_pad_ms (stays 300) unless the manual check shows clipped word endings.
 
-Tests: VAD called with 480-sample chunks sees only 512-sample windows (use a fake model);
-pre-roll audio precedes the first speech frame; state reset is called on open.
+Tests: AudioSettings().denoise is False; existing audio tests stay green.
 
 Manual check for me: say a sentence starting with a soft consonant ("fifteen", "should")
-ten times; first word must not be clipped. Press the hotkey: the overlay must appear
-without the tray freezing. Confirm "Session audio stats" peak stays under 1.0.
+ten times; the first word must not be clipped. Confirm "Session audio stats" peak stays
+under 1.0 and the log has no DenoiseFilter line.
 
-Done when: tests green, noisereduce no longer imported anywhere.
+Done when: tests green, "✅ Phase 2 complete".
 ```
 
 ---
 
-## Phase 3 — Transcript assembly and personal dictionary
+## Phase 3 — Transcript assembly: remaining cleanup
 
 ```
-Phase 3 only. Stop producing fragments like "I think. We should go." and replace the
-frequency-based hotwords with something useful.
+Phase 3 only. Turn assembly is already done (min_turn_s, one pipeline pass over the joined
+text, dictionary.txt hotwords, corrected capability claims). Verify that quickly against
+tests/test_transcript_assembly.py, then do only the leftovers:
 
-Problems to fix (verify first):
-a. VAD closes a turn after 300 ms of silence. Each turn is transcribed alone and each
-   result is post-processed alone (_stop_session runs pipeline.run per segment, then
-   joins with a space), so a mid-sentence pause gives a period and a capital in the
-   middle of a sentence.
-b. PersonalVocab feeds the 50 most frequent 5+ letter words as hotwords. Those are common
-   words, they are learned from unverified ASR output, and Parakeet ignores hotwords.
-c. PostProcessingPipeline's docstring says Whisper output is lowercase. It is not.
-d. FasterWhisperBackend.capabilities reports supports_streaming=True but yields no
-   partial results.
+1. Delete PersonalVocab: orchestrator/vocab.py, learning.vocab_enabled, learning.vocab_path,
+   its construction and use in main.py and DictationService (_refresh_hotwords still appends
+   vocab words), README and config.yaml.example rows. A config that still has the old keys
+   must load (unknown-key warning is fine). Tell me whether the file
+   ~/.config/budgie-voice/vocab.json should be deleted by me; do not delete it yourself.
+2. Hotwords sent to the backend = dictionary terms + CorrectionMemory targets, de-duplicated,
+   capped at 100 entries of at most 64 characters each. Drop the rest and log the count once
+   at DEBUG.
 
-Deliver:
-- Segmentation stays in the inference layer. In the server, treat the adapter's
-  is_end_of_speech as a hint: close the current turn on a hint only when the turn already
-  holds at least inference.min_turn_s seconds of audio (new setting, default 15). A flush
-  always closes it. Short dictations are therefore transcribed in one pass at stop; long
-  ones still stream turn by turn.
-- In DictationService, join accepted segment texts first, then run the post-processing
-  pipeline once on the joined text.
-- User dictionary: plain text file ~/.config/budgie-voice/dictionary.txt, one term per line,
-  edited by hand (add an "Open dictionary" tray entry next to the existing log entry if
-  that is one line of reuse; otherwise skip). Hotwords sent to the backend = dictionary
-  terms plus the corrected words already stored by CorrectionMemory (those were confirmed
-  by me in the preview). Delete PersonalVocab, its settings and its file handling.
-- Fix the two wrong claims (c, d).
+Ask first: for backends without a real confidence (Parakeet returns a fixed 0.9), should
+the confidence_threshold check be skipped for them (e.g. a capability flag) instead of
+comparing against a placeholder?
 
-Ask first: for backends without confidence (Parakeet returns a fixed 0.9), should the
-low-confidence path be skipped entirely instead of compared against a placeholder?
+Tests: hotwords contain only dictionary terms and correction targets; a 150-term dictionary
+yields 100; an old config with vocab keys loads.
 
-Tests: three segments "i think" / "we should go" / "tomorrow" produce one sentence with
-one capital and no inner period after the pipeline; server keeps a turn open across a
-hint below min_turn_s and closes it above; hotwords contain dictionary terms and
-correction targets only.
-
-Manual check for me: dictate a 10 second sentence with two deliberate one-second pauses.
-Output must read as one sentence. Then dictate about 40 seconds; text must still arrive
-and stop-to-text delay must be reported from the log.
-
-Done when: tests green, vocab.py removed.
+Done when: tests green, `grep -ri "vocab" budgie_voice` finds nothing except dictionary or
+corrections code, "✅ Phase 3 complete".
 ```
 
 ---
 
-## Phase 4 — Injection hardening and transcript safety net
+## Phase 4 — Injection hardening (already built: verify only)
 
 ```
-Phase 4 only. Typing stays the injection method; make it reliable for any length.
+Phase 4 only. This was implemented earlier; do NOT rebuild it. Verify each item in the code
+and tests/test_injection_hardening.py, one line each, and fix only what is missing:
+a. Typing is split into bounded pieces (injection/base.py chunk_text) with a timeout derived
+   from piece length and delay_ms; it stops at the first failed piece.
+b. A non-zero exit raises BudgieInjectionError carrying stderr but never the typed text.
+c. ydotool non-ASCII symbols are mapped to ASCII inside the ydotool backend only.
+d. Title patterns apply to dialog windows only; the WM_CLASS blocklist is unchanged;
+   Wayland logs once that secure-field detection is unavailable.
+e. The last transcript lives in memory only and the tray's "Copy last transcript" works;
+   the failure notification points to it.
 
-Problems to fix (verify first):
-a. XdotoolBackend and YdotoolBackend use a fixed 10 s subprocess timeout. At 12 ms per
-   character that is roughly 800 characters; beyond that the process is killed mid-text.
-b. Injection return codes are ignored (check=False, output discarded), so a failed
-   injection looks like success.
-c. Punctuation commands emit curly quotes and an em dash. Check whether the installed
-   ydotool can type non-ASCII at all; report what you find before changing anything.
-d. SecureFieldDetector blocks any window whose title contains "password", "sudo",
-   "secret", "unlock" and similar, which hits browser tabs, terminals and editors. On
-   Wayland the check cannot see native windows and silently passes.
-e. If injection fails or lands in the wrong place, the text is gone.
-
-Deliver:
-- Type in bounded pieces (split on whitespace, about 200 characters each) with a timeout
-  derived from piece length and delay_ms plus a margin. Stop on the first failed piece.
-- Treat a non-zero exit as failure: raise BudgieInjectionError with stderr, which Phase 1
-  turns into a notification and a clean return to IDLE.
-- Lower the default injection.delay_ms only if you can show on X11 that characters are
-  not dropped; otherwise leave it and say so.
-- ydotool non-ASCII: if it cannot type them, map the handful of symbols the pipeline can
-  emit to ASCII inside the ydotool backend only. No general transliteration.
-- Secure fields: keep the WM_CLASS blocklist. Apply the title patterns only to dialog
-  windows (_NET_WM_WINDOW_TYPE_DIALOG). On Wayland log once at startup that secure-field
-  detection is unavailable.
-- Last transcript: keep the most recent final text in memory only (never on disk, cleared
-  on exit) and add a tray action "Copy last transcript" using Qt's clipboard. On injection
-  failure the notification tells me the text can be recovered from the tray.
-
-Tests: a 3000-character text is typed in several calls and none exceeds its timeout
-(mock subprocess); non-zero exit raises; a normal window titled "Reset password - docs"
-is not blocked while a dialog with that title is; last transcript is replaced per session.
-
-Manual check for me: dictate about 2 minutes into a text editor; full text must arrive.
-Kill xdotool mid-typing once; I must get a notification and be able to copy the text
-from the tray, and the next dictation must work.
-
-Done when: tests green.
+Done when: the checklist is reported, tests green, "✅ Phase 4 complete".
 ```
 
 ---
 
-## Phase 5 — Settings, reload, install, docs
+## Phase 5 — Settings, reload, install, docs: remaining items
 
 ```
-Phase 5 only. Make configuration and installation trustworthy.
+Phase 5 only. Mostly implemented (backend list from the registry, unknown-backend fallback,
+service unit without DISPLAY, install_deps.sh fixes, example-config test). Verify against
+tests/test_phase5.py, then do only the leftovers:
 
-Problems to fix (verify first):
-a. settings_ui/window.py offers backends "nemotron" and "qwen3_asr", which are not in
-   inference/backends/registry.py. Selecting one makes get_backend raise KeyError at
-   startup, and systemd restarts the service in a loop.
-b. The model list mixes Whisper and Parakeet names regardless of the chosen backend.
-c. Changing inference.backend through Reload calls load() on the old backend instance
-   (InferenceServer.reload_backend), so the switch fails.
-d. main._reload_settings propagates only audio and inference settings. Pipeline,
-   injection, speaker, VAD, activation and indicator changes silently need a restart.
-   It also runs on the DBus/GLib thread and reaches into private attributes.
-e. scripts/install_service.sh hardcodes DISPLAY=:0 and an unused IBUS variable.
-   scripts/install_deps.sh has no shebang, installs ibus packages nothing uses and does
-   not install ydotool.
-f. README defaults (model, confidence_threshold, beam_size, speaker.threshold) differ
-   from config/settings.py. README also describes tray emoji that were replaced by SVG
-   icons.
-g. The DBus name io.gitlab.karanaithal841.BudgieVoice uses a namespace that is not ours.
+1. README and config.yaml.example must match config/settings.py exactly: defaults, every
+   key, no audio.denoise row after Phase 2, tray icons described as SVG. Extend the existing
+   example-config test to also assert that every README settings-table key exists in the
+   Settings dataclasses.
+2. Reload design differs from what was first asked: the code keeps partial hot-reload
+   (swap_backend, hotkey apply, a "restart needed for X" message) instead of restart on
+   save. Do not change it. Tell me which settings still need a restart, and whether the
+   graceful restart path would be simpler. I decide.
+3. Starting with inference.backend set to a bogus value must leave a running app and a
+   notification. Confirm with a test or a manual log line.
 
-Deliver:
-- Settings UI builds the backend list from available_backends() and the model list from
-  the selected backend's capabilities.
-- Unknown backend or model at startup: log an error, notify, fall back to the default
-  backend. Never crash-loop.
-- Reload: propose the minimal design first. My preferred option is that saving settings
-  triggers the existing graceful restart path (the one behind the tray's Restart action)
-  and the partial hot-reload code is deleted. Tell me the restart cost you measure and
-  any reason this is wrong before implementing.
-- Service unit: no hardcoded DISPLAY; rely on the session environment imported into the
-  systemd user manager, and say in the script output what to do if it is missing.
-- install_deps.sh: shebang, drop unused packages, add ydotool, print (do not run) the
-  group or udev step needed for /dev/uinput.
-- README and config.yaml.example match settings.py exactly. Add a test that loads
-  config.yaml.example and asserts every key exists in the Settings dataclasses.
+Ask first: the DBus name io.gitlab.karanaithal841.BudgieVoice. List every place that
+references it (dbus/service.py, main.py, settings_ui/window.py, scripts/*.sh, README) and
+wait for my choice to rename or keep it.
 
-Ask first: the new DBus name. Renaming breaks my existing GNOME shortcut and
-settings_ui's Reload call, so list every place that must change and wait for my choice
-(or my decision to keep the current name).
-
-Tests: UI backend list equals the registry; unknown backend falls back; example config
-has no unknown keys.
-
-Done when: tests green, and starting with inference.backend set to a bogus value leaves
-a running app and a clear notification.
+Done when: tests green, "✅ Phase 5 complete".
 ```
 
 ---
@@ -435,4 +316,38 @@ Manual check for me: time stop-to-preview with polish off and on for a 15 second
 dictation and report both numbers from the log.
 
 Done when: tests green, and with Ollama stopped dictation behaves exactly as in Phase 7.
+```
+
+---
+
+## Phase 9 — Optional: progressive commit (type while speaking)
+
+```
+Phase 9 only. Optional; ask me before starting because it changes the default feel.
+
+Model (from canonical/myna specs 007 and 008): committed text is append-only and never
+retracted; unstable partials are never injected. Today Budgie transcribes long dictations
+turn by turn but injects only at stop.
+
+Deliver:
+- New setting injection.progressive (default false). When true and the preview popup is
+  off, each turn the server closes is typed as soon as it is transcribed; stop commits and
+  types the rest. When the preview is on, behaviour is unchanged.
+- Committed segments are typed in order, once, with a single space join; the final text is
+  the concatenation of what was typed. Never edit text already typed.
+- Cancel after some text was typed: tell me, do not try to delete it.
+- Reuse the Phase 1 flush path and the Phase 4 bounded typing. No new protocol message
+  unless you can show one is needed.
+
+Ask first: whether progressive mode should also bypass the preview popup for confirmed
+speakers only, and how corrections (CorrectionMemory) should behave when text is already
+typed.
+
+Tests: segments typed in order exactly once; stop types only the remainder; cancel leaves
+state clean; progressive off = Phase 8 behaviour.
+
+Manual check for me: dictate 40 seconds with preview off and progressive on; text must
+appear during speech without duplicates.
+
+Done when: tests green.
 ```

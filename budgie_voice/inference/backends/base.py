@@ -22,6 +22,9 @@ class BackendCapabilities:
         supported_models: Model size identifiers (e.g. ``"small"``).
         supports_streaming: Whether partial hypotheses are emitted.
         supports_gpu: Whether CUDA acceleration is available.
+        reports_confidence: Whether segment confidence is a real measurement. When
+            False the server sends ``confidence: null`` and the orchestrator skips
+            its confidence threshold for this backend.
     """
 
     version: str
@@ -29,6 +32,7 @@ class BackendCapabilities:
     supported_models: list[str]
     supports_streaming: bool
     supports_gpu: bool
+    reports_confidence: bool = True
 
 
 class InferenceBackend(ABC):
@@ -91,6 +95,10 @@ class InferenceBackend(ABC):
     @abstractmethod
     async def capabilities(self) -> BackendCapabilities:
         """Return backend capability metadata."""
+
+    def is_cached(self, model: str, compute_type: str) -> bool:  # noqa: ARG002
+        """Whether *model* is on disk, so :meth:`load` needs no download."""
+        return True
 
     @property
     @abstractmethod

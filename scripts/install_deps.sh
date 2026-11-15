@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 set -euo pipefail
 
 echo "=== Budgie — dependency installation ==="
@@ -26,8 +27,7 @@ sudo apt install -y \
     ninja-build \
     git \
     xdotool \
-    ibus \
-    gir1.2-ibus-1.0 \
+    ydotool \
     gir1.2-glib-2.0 \
     gobject-introspection \
     libgirepository1.0-dev \
@@ -78,22 +78,22 @@ print("✓ dbus-python:", dbus.__version__)
 EOF
 
 # ────────────────────────────────────────────────────────────────
-# 4. Pre-download Whisper model
+# 4. Pre-download the configured speech model
 # ────────────────────────────────────────────────────────────────
-echo "[4/5] Pre-downloading Whisper model..."
+echo "[4/5] Pre-downloading the configured speech model..."
 
-"$PYTHON" - <<'EOF'
-import os
-from faster_whisper import WhisperModel
+PYTHONPATH="$(dirname "$0")/.." "$PYTHON" - <<'EOF'
+import asyncio
 
-WhisperModel(
-    "small",
-    device="cpu",
-    compute_type="int8",
-    download_root=os.path.expanduser("~/.local/share/budgie-voice/models"),
-)
+from budgie_voice.config.settings import load_settings
+from budgie_voice.inference.backends.registry import get_backend, resolve
 
-print("✓ Whisper model cached")
+inf = load_settings().inference
+name, model, problem = resolve(inf.backend, inf.model)
+if problem:
+    print("note:", problem)
+asyncio.run(get_backend(name).load(model, inf.device, inf.compute_type))
+print(f"✓ {name}/{model} cached")
 EOF
 
 # ────────────────────────────────────────────────────────────────
@@ -123,6 +123,11 @@ echo "Installation complete."
 echo
 echo "Verify:"
 echo "  $PYTHON -c 'import gi, dbus'"
+echo
+echo "ydotool (Wayland typing) needs /dev/uinput access. Not changed by this script;"
+echo "to allow it, run once and log in again:"
+echo "  sudo usermod -aG input \"\$USER\""
+echo "  echo 'KERNEL==\"uinput\", GROUP=\"input\", MODE=\"0660\"' | sudo tee /etc/udev/rules.d/80-uinput.rules"
 echo
 echo "Then run:"
 echo "  python -m budgie_voice.speaker.enroller"

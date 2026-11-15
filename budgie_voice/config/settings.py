@@ -62,7 +62,9 @@ class AudioSettings:
     sample_rate: int = 16000
     chunk_duration_ms: int = 30
     format: Literal["pcm16", "float32"] = "pcm16"
-    denoise: bool = True
+    # noisereduce gates isolated 30 ms chunks and can turn real speech into silence,
+    # so it is opt-in. Enrollment uses the same setting: re-enroll after changing it.
+    denoise: bool = False
     # Bluetooth mic gain, applied when a "bt:" device is pinned. None = leave alone.
     # Clamped to 50-150: 150 clipped hard on the Nord Buds 3 Pro.
     input_gain_pct: int | None = None
