@@ -60,7 +60,7 @@ async def test_faster_whisper_capabilities() -> None:
     assert caps.version == INTERFACE_VERSION
     assert "small" in caps.supported_models
     assert "en" in caps.supported_languages
-    assert caps.supports_streaming is True
+    assert caps.supports_streaming is False  # batch decode, no partial hypotheses
 
 
 def test_faster_whisper_not_ready_before_load() -> None:

@@ -43,11 +43,14 @@ class InferenceServer:
     Args:
         backend: Loaded :class:`~myna.inference.backends.base.InferenceBackend`.
         port: TCP port to bind (default 18000).
+        min_turn_s: An end-of-speech hint closes a turn only once it holds this
+            many seconds of audio (a flush always does).
     """
 
-    def __init__(self, backend: InferenceBackend, port: int = 18000) -> None:
+    def __init__(self, backend: InferenceBackend, port: int = 18000, min_turn_s: float = 15.0) -> None:
         self._backend = backend
         self._port = port
+        self._min_turn_s = min_turn_s
         self._app = self._build_app()
         self._uvicorn: uvicorn.Server | None = None
         self._server_thread: threading.Thread | None = None
@@ -168,7 +171,7 @@ class InferenceServer:
             await ws.accept()
             _LOG.debug("WebSocket client connected")
             try:
-                await _handle_ws(ws, backend)
+                await _handle_ws(ws, backend, self._min_turn_s)
             except WebSocketDisconnect:
                 _LOG.debug("WebSocket client disconnected")
             except Exception as exc:  # noqa: BLE001
@@ -197,7 +200,7 @@ def _decode_audio_file(raw: bytes) -> np.ndarray:
     return audio.astype(np.float32)
 
 
-async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
+async def _handle_ws(ws: WebSocket, backend: InferenceBackend, min_turn_s: float = 15.0) -> None:
     """Feed frames to the backend continuously per speech turn.
 
     Each yielded :class:`TranscriptSegment` is sent to the client as soon as
@@ -206,11 +209,17 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
     while the user is still talking. Batch backends (e.g. faster-whisper,
     which only sees the full turn once its async generator is exhausted)
     behave exactly as before: one send, at turn end.
+
+    ``is_end_of_speech`` is only a hint. The turn closes on it once it holds
+    ``min_turn_s`` of audio, so a short dictation is transcribed in one pass
+    (at flush) instead of being cut at every pause; a ``flush`` always closes it.
     """
     language = "en"
     hotwords: str | None = None
     frame_queue: asyncio.Queue[np.ndarray | None] | None = None
     turn_task: asyncio.Task[None] | None = None
+    turn_samples = 0
+    turn_sample_rate = 16_000
 
     async def _frame_source(queue: asyncio.Queue[np.ndarray | None]) -> AsyncIterator[np.ndarray]:
         while True:
@@ -235,7 +244,7 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
 
     async def _close_turn() -> None:
         """End the open turn (if any) and wait for its transcription."""
-        nonlocal frame_queue, turn_task
+        nonlocal frame_queue, turn_task, turn_samples
         if frame_queue is None or turn_task is None:
             return
         await frame_queue.put(None)  # close this turn's async generator
@@ -246,6 +255,7 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
         finally:
             frame_queue = None
             turn_task = None
+            turn_samples = 0
 
     try:
         while True:
@@ -261,6 +271,7 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
                     await asyncio.gather(turn_task, return_exceptions=True)
                     frame_queue = None
                     turn_task = None
+                    turn_samples = 0
                 await ws.send_text(json.dumps({"type": "flushed", "id": msg.get("id")}))
                 continue
 
@@ -281,8 +292,10 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
                 frame_queue = asyncio.Queue()
                 turn_task = asyncio.create_task(_run_turn(frame_queue, language, hotwords))
             await frame_queue.put(audio)
+            turn_samples += len(audio)
+            turn_sample_rate = msg.get("sample_rate", turn_sample_rate)
 
-            if msg.get("is_end_of_speech"):
+            if msg.get("is_end_of_speech") and turn_samples >= min_turn_s * turn_sample_rate:
                 await _close_turn()
     finally:
         if turn_task is not None:

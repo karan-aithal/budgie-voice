@@ -53,6 +53,8 @@ Copy the example: `cp config.yaml.example ~/.config/myna/config.yaml`int8
 | `inference.confidence_threshold` | `0.55` | Discard segments below this |
 | `inference.beam_size` | `5` | Whisper beam size (1 = fastest greedy) |
 | `inference.finalize_timeout_s` | `15` | Max wait at stop for the last turn's transcription; on timeout nothing is typed |
+| `inference.min_turn_s` | `15` | A pause closes a turn only once it holds this much audio, so short dictations are transcribed in one pass; longer ones stream turn by turn |
+| `learning.dictionary_path` | `~/.config/myna/dictionary.txt` | Your names and jargon, one per line (`#` comments allowed), sent to the decoder as hotwords together with words you corrected in the preview. Whisper uses them; Parakeet ignores hotwords |
 | `injection.backend` | `auto` | `auto` \| `ydotool` \| `xdotool` |
 | `speaker.enabled` | `true` | Speaker verification on/off |
 | `speaker.threshold` | `0.75` | Cosine similarity cutoff |

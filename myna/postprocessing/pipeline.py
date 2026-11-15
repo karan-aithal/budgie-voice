@@ -44,7 +44,7 @@ class PostProcessingPipeline:
         """Run the full post-processing chain.
 
         Args:
-            text: Raw STT transcript (already normalised to lowercase by Whisper).
+            text: Raw STT transcript, as the backend produced it.
 
         Returns:
             Cleaned, capitalised, punctuated text ready for injection.

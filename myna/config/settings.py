@@ -98,6 +98,9 @@ class InferenceSettings:
     beam_size: int = 3
     # Max wait at stop for the last turn's transcription before giving up.
     finalize_timeout_s: float = 15.0
+    # An end-of-speech hint closes a turn only once it holds this much audio, so a
+    # short dictation is transcribed in one pass instead of cut at every pause.
+    min_turn_s: float = 15.0
     # Hallucination guards (faster-whisper decode-time): reject segments that
     # look like silence-babble rather than real speech.
     no_speech_threshold: float = 0.6
@@ -122,6 +125,8 @@ class LearningSettings:
     adapt_voiceprint: bool = True
     vocab_enabled: bool = True
     vocab_path: str = "~/.config/myna/vocab.json"
+    # Hand-edited list of names/jargon (one per line) sent to the decoder as hotwords.
+    dictionary_path: str = "~/.config/myna/dictionary.txt"
     corrections_enabled: bool = True
     corrections_path: str = "~/.config/myna/corrections.json"
 

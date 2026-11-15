@@ -79,10 +79,10 @@ class DictationService:
         self._vocab: PersonalVocab | None = None
         if settings.learning.vocab_enabled:
             self._vocab = PersonalVocab(Path(settings.learning.vocab_path).expanduser())
-            self._client.set_hotwords(self._vocab.hotwords())
         self._corrections: CorrectionMemory | None = None
         if settings.learning.corrections_enabled:
             self._corrections = CorrectionMemory(Path(settings.learning.corrections_path).expanduser())
+        self._refresh_hotwords()
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -181,6 +181,7 @@ class DictationService:
 
         self._pending.clear()
         self._audio_buf.clear()
+        self._refresh_hotwords()  # picks up dictionary edits without a restart
 
         await self._session.to_starting(window_id)
         try:
@@ -197,15 +198,20 @@ class DictationService:
         except MynaSessionError:
             return
 
+        stopped_at = time.monotonic()
         try:
             await self._stop_capture()
             # Closes the open turn and returns once its segments are in _pending.
             await self._client.flush(self._settings.inference.finalize_timeout_s)
+            _LOG.info(
+                "Stop-to-text %.2f s (%d segments)", time.monotonic() - stopped_at, len(self._pending),
+            )
 
             inject_ok = await self._verify_speaker()
             if inject_ok:
-                texts = [self._pipeline.run(seg.text) for seg in self._pending]
-                heard = " ".join(t for t in texts if t)
+                # One pipeline pass over the whole dictation: per-segment passes put a
+                # full stop and a capital at every pause.
+                heard = self._pipeline.run(" ".join(seg.text for seg in self._pending if seg.text))
                 if self._corrections is not None:
                     heard = self._corrections.apply(heard)  # auto-fix known mishears
                 combined = heard
@@ -223,8 +229,6 @@ class DictationService:
                         self._corrections.learn(heard, combined)
                     if self._vocab is not None:
                         self._vocab.update(combined)
-                if self._vocab is not None:
-                    self._client.set_hotwords(self._vocab.hotwords())
 
             self._pending.clear()
             self._audio_buf.clear()
@@ -321,6 +325,15 @@ class DictationService:
     # Helpers
     # ------------------------------------------------------------------
 
+    def _refresh_hotwords(self) -> None:
+        """Hotwords: dictionary terms, then preview-confirmed corrections, then learned vocab."""
+        terms = _read_terms(Path(self._settings.learning.dictionary_path).expanduser())
+        if self._corrections is not None:
+            terms += self._corrections.targets()
+        if self._vocab is not None:
+            terms += (self._vocab.hotwords() or "").split()
+        self._client.set_hotwords(" ".join(dict.fromkeys(terms)) or None)
+
     def _on_mic_silent(self, label: str) -> None:
         asyncio.ensure_future(_notify(self._settings, f"⚠️ Mic silent: {label}"))
 
@@ -342,6 +355,15 @@ class DictationService:
             # Margin guard keeps borderline (possibly impostor) audio out.
             await loop.run_in_executor(None, self._verifier.adapt, audio)
         return is_me
+
+
+def _read_terms(path: Path) -> list[str]:
+    """One term per line; blank lines and ``#`` comments ignored. [] if unreadable."""
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    return [t for line in lines if (t := line.strip()) and not t.startswith("#")]
 
 
 async def _notify(settings: Settings, message: str) -> None:

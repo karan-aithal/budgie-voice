@@ -75,7 +75,7 @@ async def main_async() -> bool:
         compression_ratio_threshold=settings.inference.compression_ratio_threshold,
     )
 
-    server = InferenceServer(backend, port=settings.inference.server_port)
+    server = InferenceServer(backend, port=settings.inference.server_port, min_turn_s=settings.inference.min_turn_s)
     server.start()
     await asyncio.sleep(0.3)
 

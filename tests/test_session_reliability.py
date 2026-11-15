@@ -49,13 +49,17 @@ class _Backend:
     def __init__(self) -> None:
         self.gate = asyncio.Event()
         self.gate.set()
+        self.turns = 0
+        self.script: list[str] = []  # if set, one entry is spoken per turn instead
 
     async def transcribe_stream(self, frames, language, hotwords=None):
         heard: set[int] = set()
         async for frame in frames:
             heard.update(int(v) for v in np.rint(frame * 32767.0))
         await self.gate.wait()
-        yield TranscriptSegment(" ".join(map(str, sorted(heard))), 0.9, True, language)
+        self.turns += 1
+        text = self.script.pop(0) if self.script else " ".join(map(str, sorted(heard)))
+        yield TranscriptSegment(text, 0.9, True, language)
 
 
 class _Adapter:
@@ -81,7 +85,7 @@ def _frame(value: int, end: bool = False) -> AudioFrame:
 
 
 class _Rig:
-    def __init__(self, monkeypatch, timeout_s: float = 5.0) -> None:
+    def __init__(self, monkeypatch, timeout_s: float = 5.0, min_turn_s: float = 15.0) -> None:
         monkeypatch.setattr(dictation_service, "_notify", AsyncMock())
         monkeypatch.setattr(dictation_service, "_get_focused_window", lambda: 1)
         settings = Settings()
@@ -111,7 +115,7 @@ class _Rig:
             injector=self.injector, verifier=MagicMock(), settings=settings,
             on_state_change=self.states.append,
         )
-        self._server = asyncio.ensure_future(_handle_ws(link, self.backend))  # type: ignore[arg-type]
+        self._server = asyncio.ensure_future(_handle_ws(link, self.backend, min_turn_s))  # type: ignore[arg-type]
 
     async def dictate(self, *frames: AudioFrame, stop: bool = True) -> None:
         """Start a session, let *frames* reach the server, optionally stop."""
@@ -154,7 +158,7 @@ async def test_second_session_does_not_get_first_sessions_audio(monkeypatch) -> 
 async def test_cancel_then_start_is_clean(monkeypatch) -> None:
     """Cancel while a closed turn is still being transcribed: its late segment
     and its audio must both stay out of the next session."""
-    rig = _Rig(monkeypatch)
+    rig = _Rig(monkeypatch, min_turn_s=0)  # the hint closes the turn at once
     await rig.svc.start()
     rig.backend.gate.clear()
     await rig.dictate(_frame(1000, end=True), _frame(1500), stop=False)

@@ -110,7 +110,7 @@ class FasterWhisperBackend(InferenceBackend):
             version=self.interface_version,
             supported_languages=_SUPPORTED_LANGUAGES,
             supported_models=_SUPPORTED_MODELS,
-            supports_streaming=True,
+            supports_streaming=False,
             supports_gpu=True,
         )
 

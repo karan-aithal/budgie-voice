@@ -34,6 +34,7 @@ inference:
   confidence_threshold: 0.40
   beam_size: 3
   finalize_timeout_s: 15        # max wait at stop for the last turn's transcription
+  min_turn_s: 15                # a pause ends a turn only after this much audio; shorter dictations transcribe in one pass
 
 speaker:
   enabled: true
@@ -44,6 +45,7 @@ learning:
   adapt_voiceprint: true
   vocab_enabled: true
   corrections_enabled: true
+  dictionary_path: "~/.config/myna/dictionary.txt"   # your names/jargon, one per line
 
 injection:
   backend: "auto"         # "auto" | "ydotool" | "xdotool"

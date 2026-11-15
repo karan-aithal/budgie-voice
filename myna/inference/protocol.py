@@ -32,7 +32,8 @@ class AudioFrame:
         format: Encoding — ``"pcm16"`` or ``"float32"``.
         timestamp_ms: Wall-clock milliseconds at capture time.
         is_end_of_speech: Hint from AudioAdapter; inference backend decides
-            final segmentation independently.
+            final segmentation independently (the server ignores it until the
+            turn holds ``inference.min_turn_s`` of audio).
     """
 
     data: bytes

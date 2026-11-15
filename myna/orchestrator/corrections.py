@@ -61,6 +61,10 @@ class CorrectionMemory:
                 del self._map[k]
         self._save()
 
+    def targets(self) -> list[str]:
+        """Every corrected spelling the user has typed in the preview (confirmed by them)."""
+        return [fix for fixes in self._map.values() for fix in fixes]
+
     def apply(self, text: str) -> str:
         """Substitute words with a fix seen >= _APPLY_AFTER times."""
         def _sub(m: re.Match) -> str:
