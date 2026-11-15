@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QColor, QKeyEvent, QPainter, QPen
 from PyQt6.QtWidgets import QApplication, QHBoxLayout, QPushButton, QTextEdit, QVBoxLayout, QWidget
 
@@ -137,6 +137,7 @@ class PreviewWidget(QWidget):
         self.raise_()
         self.activateWindow()
         self._edit.setFocus()
+        QTimer.singleShot(0, self._position_bottom_right)
 
     def _accept(self) -> None:
         self._finish(self._edit.toPlainText().strip())
