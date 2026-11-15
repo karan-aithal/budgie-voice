@@ -14,7 +14,7 @@ import subprocess
 import time
 import unicodedata
 
-from myna.injection.base import TextOutputBackend
+from myna.injection.base import TextOutputBackend, chunk_text, run_checked, type_timeout
 from myna.injection.secure import SecureFieldDetector
 from myna.utils.exceptions import MynaInjectionError
 
@@ -70,6 +70,12 @@ def _sanitize(text: str) -> str:
     )
 
 
+# ydotool types through a US-layout keycode table, so non-ASCII cannot be typed.
+# These are the only such characters the post-processing pipeline emits
+# (punctuation commands); anything else is left as the ASR produced it.
+_ASCII_FALLBACK = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2014": "-"})
+
+
 class YdotoolBackend(TextOutputBackend):
     """Inject text via ``ydotool`` (uinput) — works on native Wayland.
 
@@ -102,7 +108,7 @@ class YdotoolBackend(TextOutputBackend):
         Raises:
             MynaInjectionError: ydotool invocation fails.
         """
-        text = _sanitize(text)
+        text = _sanitize(text).translate(_ASCII_FALLBACK)
         if not text:
             return
         loop = asyncio.get_running_loop()
@@ -135,15 +141,11 @@ class YdotoolBackend(TextOutputBackend):
                 self._enter()
 
     def _type(self, text: str) -> None:
-        cmd = ["ydotool", "type", "--key-delay", str(self._delay_ms), "--", text]
-        try:
-            subprocess.run(cmd, check=False, capture_output=True, timeout=10)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise MynaInjectionError(f"ydotool type failed: {exc}") from exc
+        for piece in chunk_text(text):
+            run_checked(
+                ["ydotool", "type", "--key-delay", str(self._delay_ms), "--", piece],
+                type_timeout(piece, self._delay_ms), "ydotool type",
+            )
 
     def _enter(self) -> None:
-        cmd = ["ydotool", "key", f"{_KEY_ENTER}:1", f"{_KEY_ENTER}:0"]
-        try:
-            subprocess.run(cmd, check=False, capture_output=True, timeout=5)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise MynaInjectionError(f"ydotool key failed: {exc}") from exc
+        run_checked(["ydotool", "key", f"{_KEY_ENTER}:1", f"{_KEY_ENTER}:0"], 5, "ydotool key")

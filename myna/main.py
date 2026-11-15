@@ -105,6 +105,8 @@ async def main_async() -> bool:
     except Exception as exc:
         _LOG.warning("Injection backend unavailable (%s) — null fallback", exc)
         injector = _NullBackend()
+    if os.environ.get("XDG_SESSION_TYPE") == "wayland" and settings.injection.block_secure_fields:
+        _LOG.warning("Secure-field detection is unavailable on Wayland — dictation is not blocked in password fields")
 
     # ------------------------------------------------------------------
     # Speaker verifier
@@ -227,6 +229,7 @@ async def main_async() -> bool:
             on_settings=lambda: SettingsWindow(dict_svc._settings).show(),
             on_quit=stop_event.set,
             on_restart=_request_restart,
+            get_last_text=lambda: dict_svc.last_transcript,
             log_path=log_path,
         )
         tray.show()

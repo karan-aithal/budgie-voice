@@ -15,7 +15,7 @@ from typing import Callable
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
+from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from myna.utils.aio import log_failure
 
@@ -60,6 +60,7 @@ class TrayIcon(QSystemTrayIcon):
         on_enroll: Callable to open the enrollment wizard.
         on_settings: Callable to open the settings window.
         on_restart: Callable to shut down and relaunch the app.
+        get_last_text: Returns the last dictation, for "Copy Last Transcript".
         on_quit: Callable to initiate application shutdown.
         log_path: Path to the rotating log file (opened with xdg-open).
         parent: Optional Qt parent.
@@ -73,6 +74,7 @@ class TrayIcon(QSystemTrayIcon):
         on_quit: Callable,
         log_path: Path,
         on_restart: Callable | None = None,
+        get_last_text: Callable[[], str] | None = None,
         parent: object = None,
     ) -> None:
         super().__init__(parent)  # type: ignore[call-arg]
@@ -80,7 +82,7 @@ class TrayIcon(QSystemTrayIcon):
         self._revert_timer = QTimer()
         self._revert_timer.setSingleShot(True)
 
-        self._build_menu(on_toggle, on_enroll, on_settings, on_quit, log_path, on_restart)
+        self._build_menu(on_toggle, on_enroll, on_settings, on_quit, log_path, on_restart, get_last_text)
         self._update_icon(TrayState.IDLE)
         self.setVisible(True)
 
@@ -133,6 +135,7 @@ class TrayIcon(QSystemTrayIcon):
         on_quit: Callable,
         log_path: Path,
         on_restart: Callable | None = None,
+        get_last_text: Callable[[], str] | None = None,
     ) -> None:
         import subprocess  # noqa: PLC0415
 
@@ -153,6 +156,12 @@ class TrayIcon(QSystemTrayIcon):
         log_act.triggered.connect(
             lambda: subprocess.run(["xdg-open", str(log_path)], check=False)
         )
+
+        if get_last_text is not None:
+            copy_act = menu.addAction("📋  Copy Last Transcript")
+            copy_act.triggered.connect(
+                lambda: QApplication.clipboard().setText(get_last_text())  # type: ignore[union-attr]
+            )
 
         menu.addSeparator()
 

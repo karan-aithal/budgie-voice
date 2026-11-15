@@ -19,7 +19,7 @@ import subprocess
 import time
 import unicodedata
 
-from myna.injection.base import TextOutputBackend
+from myna.injection.base import TextOutputBackend, chunk_text, run_checked, type_timeout
 from myna.injection.secure import SecureFieldDetector
 from myna.utils.exceptions import MynaInjectionError
 
@@ -163,21 +163,14 @@ class XdotoolBackend(TextOutputBackend):
     def _type_segment(self, text: str) -> None:
         # No --window: that would switch xdotool to XSendEvent, which most
         # toolkits reject. See module docstring.
-        cmd = [
-            "xdotool", "type", "--clearmodifiers",
-            "--delay", str(self._delay_ms), "--", text,
-        ]
-        try:
-            subprocess.run(cmd, check=False, capture_output=True, timeout=10)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise MynaInjectionError(f"xdotool type failed: {exc}") from exc
+        for piece in chunk_text(text):
+            run_checked(
+                ["xdotool", "type", "--clearmodifiers", "--delay", str(self._delay_ms), "--", piece],
+                type_timeout(piece, self._delay_ms), "xdotool type",
+            )
 
     def _press_key(self, key: str) -> None:
-        cmd = ["xdotool", "key", "--clearmodifiers", key]
-        try:
-            subprocess.run(cmd, check=False, capture_output=True, timeout=5)
-        except (OSError, subprocess.TimeoutExpired) as exc:
-            raise MynaInjectionError(f"xdotool key failed: {exc}") from exc
+        run_checked(["xdotool", "key", "--clearmodifiers", key], 5, "xdotool key")
 
 
 def _get_focused_window() -> int | None:

@@ -67,3 +67,12 @@ def test_quit_still_wired(qapp) -> None:
     quit_act.trigger()
     assert calls["quit"] == 1
     assert calls["restart"] == 0
+
+
+def test_copy_last_transcript_puts_text_on_clipboard(qapp) -> None:
+    tray, _ = _make_tray(get_last_text=lambda: "hello from last time")
+    copy = next(a for a in tray.contextMenu().actions() if "Copy Last" in a.text())
+
+    copy.trigger()
+
+    assert QApplication.clipboard().text() == "hello from last time"

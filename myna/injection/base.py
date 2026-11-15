@@ -1,9 +1,58 @@
 """TextOutputBackend ABC — versioned interface all injection backends implement."""
 from __future__ import annotations
 
+import re
+import subprocess
 from abc import ABC, abstractmethod
 
+from myna.utils.exceptions import MynaInjectionError
+
 INTERFACE_VERSION = "1.0"
+
+_PIECE_CHARS = 200
+
+
+def chunk_text(text: str, limit: int = _PIECE_CHARS) -> list[str]:
+    """Split *text* into pieces of at most *limit* characters, breaking after whitespace.
+
+    Pieces join back to *text* exactly. A single unbroken run longer than *limit*
+    (a URL) is cut hard. Typing in bounded pieces keeps every subprocess call short
+    enough for a timeout that means something, and a failure loses at most one piece.
+    """
+    pieces: list[str] = []
+    cur = ""
+    for tok in re.findall(r"\S+\s*|\s+", text):
+        while len(tok) > limit:
+            if cur:
+                pieces.append(cur)
+                cur = ""
+            pieces.append(tok[:limit])
+            tok = tok[limit:]
+        if len(cur) + len(tok) > limit:
+            pieces.append(cur)
+            cur = ""
+        cur += tok
+    if cur:
+        pieces.append(cur)
+    return pieces
+
+
+def type_timeout(piece: str, delay_ms: int) -> float:
+    """Seconds a typing subprocess may take: 2x the pure key delay, plus 5 s margin
+    for startup, keymap remaps and a busy desktop (raise the margin if typing is
+    killed on a loaded machine)."""
+    return len(piece) * max(delay_ms, 1) * 2 / 1000 + 5.0
+
+
+def run_checked(cmd: list[str], timeout: float, what: str) -> None:
+    """Run *cmd*; raise :exc:`MynaInjectionError` on a timeout, spawn failure or non-zero exit."""
+    try:
+        result = subprocess.run(cmd, check=False, capture_output=True, timeout=timeout)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise MynaInjectionError(f"{what} failed: {exc}") from exc
+    if result.returncode != 0:
+        stderr = result.stderr.decode("utf-8", "replace").strip()
+        raise MynaInjectionError(f"{what} exited {result.returncode}: {stderr}")
 
 
 class TextOutputBackend(ABC):

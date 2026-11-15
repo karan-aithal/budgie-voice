@@ -75,6 +75,7 @@ class DictationService:
         self._send_task: asyncio.Task[None] | None = None
         self._recv_task: asyncio.Task[None] | None = None
         self._pending: list[TranscriptSegment] = []
+        self._last_transcript = ""  # memory only, never written to disk
         self._audio_buf: list[np.ndarray] = []
         self._vocab: PersonalVocab | None = None
         if settings.learning.vocab_enabled:
@@ -164,6 +165,11 @@ class DictationService:
             await self._cancel_session()
 
     @property
+    def last_transcript(self) -> str:
+        """Final text of the most recent dictation, kept so a failed typing can be recovered."""
+        return self._last_transcript
+
+    @property
     def state(self) -> SessionState:
         return self._session.state
 
@@ -199,6 +205,7 @@ class DictationService:
             return
 
         stopped_at = time.monotonic()
+        text_ready = False
         try:
             await self._stop_capture()
             # Closes the open turn and returns once its segments are in _pending.
@@ -218,6 +225,8 @@ class DictationService:
                 if heard and self._on_preview is not None and self._settings.injection.preview_before_inject:
                     combined = await self._on_preview(heard)
                 if combined:
+                    self._last_transcript = combined
+                    text_ready = True
                     _LOG.info("Injecting %d chars", len(combined))
                     _LOG.debug("Injecting: %r", combined[:80])
                     await self._injector.start_session(self._session.target_window_id)
@@ -236,7 +245,10 @@ class DictationService:
         except TimeoutError:
             await self._fail("Transcription timed out — nothing typed")
         except Exception:  # noqa: BLE001
-            await self._fail("Dictation failed — nothing typed")
+            await self._fail(
+                "Typing failed — text kept: tray → Copy Last Transcript" if text_ready
+                else "Dictation failed — nothing typed"
+            )
 
     async def _cancel_session(self) -> None:
         await self._stop_capture()

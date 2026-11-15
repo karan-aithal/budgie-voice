@@ -27,13 +27,10 @@ class TestSecureFieldDetector:
         ):
             assert detector.is_secure(12345) is True
 
-    def test_blocked_title_pattern(self) -> None:
+    def test_blocked_title_pattern_on_dialog(self) -> None:
         detector = SecureFieldDetector()
-        with patch.object(
-            detector, "_xprop", side_effect=lambda wid, prop: (
-                "Enter your password" if prop == "WM_NAME" else ""
-            )
-        ):
+        props = {"WM_NAME": "Enter your password", "_NET_WM_WINDOW_TYPE": "_NET_WM_WINDOW_TYPE_DIALOG"}
+        with patch.object(detector, "_xprop", side_effect=lambda wid, prop: props.get(prop, "")):
             assert detector.is_secure(12345) is True
 
     def test_safe_window(self) -> None:
@@ -134,7 +131,9 @@ class TestXdotoolBackend:
                 await backend.start_session(12345)
                 with patch("subprocess.run") as inner_run:
                     # windowactivate fails; type must still run
-                    inner_run.return_value = MagicMock(returncode=1, stderr=b"no such window")
+                    inner_run.side_effect = lambda cmd, **kw: MagicMock(
+                        returncode=1 if "windowactivate" in cmd else 0, stderr=b"no such window",
+                    )
                     await backend.commit_text("Hello")
 
                 cmds = [c[0][0] for c in inner_run.call_args_list]

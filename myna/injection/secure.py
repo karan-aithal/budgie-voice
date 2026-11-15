@@ -1,7 +1,10 @@
 """SecureFieldDetector — block injection into password / secure fields.
 
-Checks ``xprop WM_CLASS`` and ``WM_NAME`` against blocklists.
-Falls back gracefully on non-Linux / missing xprop.
+Checks ``xprop WM_CLASS`` against a blocklist, and ``WM_NAME`` against title
+patterns for *dialog* windows only: ordinary windows (browser tabs, terminals,
+editors) often have "password" in their title without being a password prompt.
+Falls back gracefully on non-Linux / missing xprop. Sees X11 windows only —
+on native Wayland there is nothing to inspect (main logs that at startup).
 """
 from __future__ import annotations
 
@@ -51,7 +54,6 @@ class SecureFieldDetector:
             return False
 
         wm_class = self._xprop(window_id, "WM_CLASS")
-        wm_name = self._xprop(window_id, "WM_NAME")
 
         wm_class_lower = wm_class.lower()
         for blocked in BLOCKED_WM_CLASS:
@@ -59,10 +61,12 @@ class SecureFieldDetector:
                 _LOG.info("Secure field detected via WM_CLASS: %s", blocked)
                 return True
 
-        for pat in _COMPILED_TITLE:
-            if pat.search(wm_name):
-                _LOG.info("Secure field detected via WM_NAME pattern")
-                return True
+        if "_NET_WM_WINDOW_TYPE_DIALOG" in self._xprop(window_id, "_NET_WM_WINDOW_TYPE"):
+            wm_name = self._xprop(window_id, "WM_NAME")
+            for pat in _COMPILED_TITLE:
+                if pat.search(wm_name):
+                    _LOG.info("Secure field detected via dialog WM_NAME pattern")
+                    return True
 
         return False
 
