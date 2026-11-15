@@ -1,11 +1,24 @@
 """Versioned wire-protocol message types for Myna inference channels.
 
 Data Channel: WebSocket /ws/transcribe → AudioFrame UP, TranscriptSegment DOWN
+
+Turn control on the same socket (protocol version 2), plain JSON:
+
+  UP   ``{"type": "flush", "id": n}``  close the open turn if there is one, wait
+       for its transcription, send its segments, then acknowledge.
+  UP   ``{"type": "reset", "id": n}``  discard the open turn without transcribing,
+       then acknowledge.
+  DOWN ``{"type": "flushed", "id": n}`` acknowledges either, echoing its id.
+
+The server handles messages strictly in order, so every segment of audio sent
+before a flush/reset arrives before its acknowledgement.
 """
 from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
+
+PROTOCOL_VERSION = 2
 
 
 @dataclass

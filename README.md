@@ -52,6 +52,7 @@ Copy the example: `cp config.yaml.example ~/.config/myna/config.yaml`int8
 | `inference.language` | `en` | BCP-47 language code |
 | `inference.confidence_threshold` | `0.55` | Discard segments below this |
 | `inference.beam_size` | `5` | Whisper beam size (1 = fastest greedy) |
+| `inference.finalize_timeout_s` | `15` | Max wait at stop for the last turn's transcription; on timeout nothing is typed |
 | `injection.backend` | `auto` | `auto` \| `ydotool` \| `xdotool` |
 | `speaker.enabled` | `true` | Speaker verification on/off |
 | `speaker.threshold` | `0.75` | Cosine similarity cutoff |

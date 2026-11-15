@@ -4,8 +4,9 @@ Runs uvicorn in a daemon background thread so the main asyncio loop
 stays free for orchestration.
 
 Data Channel  : WebSocket ``/ws/transcribe``
-  UP   → JSON-encoded AudioFrame messages (PCM base64)
-  DOWN ← JSON-encoded TranscriptSegment messages
+  UP   → JSON-encoded AudioFrame messages (PCM base64), ``flush`` / ``reset``
+  DOWN ← JSON-encoded TranscriptSegment messages, ``flushed``
+  (see :mod:`myna.inference.protocol`)
 
 Control Channel: HTTP GET ``/capabilities``
   DOWN ← JSON CapabilitiesResponse
@@ -232,12 +233,38 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
                 )
             )
 
+    async def _close_turn() -> None:
+        """End the open turn (if any) and wait for its transcription."""
+        nonlocal frame_queue, turn_task
+        if frame_queue is None or turn_task is None:
+            return
+        await frame_queue.put(None)  # close this turn's async generator
+        try:
+            await turn_task
+        except Exception:  # noqa: BLE001 — a failed turn must not kill the connection
+            _LOG.exception("Turn transcription failed")
+        finally:
+            frame_queue = None
+            turn_task = None
+
     try:
         while True:
             raw = await ws.receive_text()
             msg: dict = json.loads(raw)
+            kind = msg.get("type")
 
-            if msg.get("type") != "audio_frame":
+            if kind in ("flush", "reset"):
+                if kind == "flush":
+                    await _close_turn()
+                elif turn_task is not None:
+                    turn_task.cancel()
+                    await asyncio.gather(turn_task, return_exceptions=True)
+                    frame_queue = None
+                    turn_task = None
+                await ws.send_text(json.dumps({"type": "flushed", "id": msg.get("id")}))
+                continue
+
+            if kind != "audio_frame":
                 continue
 
             pcm_bytes = base64.b64decode(msg["data"])
@@ -256,11 +283,7 @@ async def _handle_ws(ws: WebSocket, backend: InferenceBackend) -> None:
             await frame_queue.put(audio)
 
             if msg.get("is_end_of_speech"):
-                await frame_queue.put(None)  # close this turn's async generator
-                assert turn_task is not None
-                await turn_task
-                frame_queue = None
-                turn_task = None
+                await _close_turn()
     finally:
         if turn_task is not None:
             turn_task.cancel()

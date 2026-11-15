@@ -33,6 +33,8 @@ def _service(debounce_ms: int = 350, trigger: str = "pynput") -> DictationServic
 
     client = MagicMock()
     client.send_frame = AsyncMock()
+    client.flush = AsyncMock()
+    client.reset = AsyncMock()
 
     injector = MagicMock()
     injector.is_secure_field.return_value = False

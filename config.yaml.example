@@ -30,6 +30,7 @@ inference:
   language: "en"
   confidence_threshold: 0.40
   beam_size: 3
+  finalize_timeout_s: 15        # max wait at stop for the last turn's transcription
 
 speaker:
   enabled: true

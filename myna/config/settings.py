@@ -81,6 +81,8 @@ class InferenceSettings:
     language: str = "en"
     confidence_threshold: float = 0.40
     beam_size: int = 3
+    # Max wait at stop for the last turn's transcription before giving up.
+    finalize_timeout_s: float = 15.0
     # Hallucination guards (faster-whisper decode-time): reject segments that
     # look like silence-babble rather than real speech.
     no_speech_threshold: float = 0.6

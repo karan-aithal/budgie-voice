@@ -17,6 +17,8 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QMenu, QSystemTrayIcon
 
+from myna.utils.aio import log_failure
+
 _LOG = logging.getLogger(__name__)
 
 _ICONS_DIR = Path(__file__).parent / "icons"
@@ -90,17 +92,22 @@ class TrayIcon(QSystemTrayIcon):
         """Update the tray icon and tooltip to reflect *state*.
 
         ``LOW_CONFIDENCE`` auto-reverts to prior state after 3 s.
-        ``COMPLETED`` reverts to IDLE after 2 s.
+        ``COMPLETED`` and ``ERROR`` show for 2 s, then revert to IDLE. The session
+        goes to IDLE right after either, so an IDLE arriving during a flash is
+        deferred to the timer instead of wiping the flash.
         """
+        if state == TrayState.IDLE and self._revert_timer.isActive():
+            self._prior = TrayState.IDLE
+            return
         if state == TrayState.LOW_CONFIDENCE:
             self._update_icon(TrayState.LOW_CONFIDENCE)
             self._revert_timer.timeout.connect(
                 lambda: self._update_icon(self._prior), Qt.ConnectionType.SingleShotConnection
             )
             self._revert_timer.start(3000)
-        elif state == TrayState.COMPLETED:
+        elif state in (TrayState.COMPLETED, TrayState.ERROR):
             self._prior = TrayState.IDLE
-            self._update_icon(TrayState.COMPLETED)
+            self._update_icon(state)
             self._revert_timer.timeout.connect(
                 lambda: self._update_icon(TrayState.IDLE), Qt.ConnectionType.SingleShotConnection
             )
@@ -132,7 +139,9 @@ class TrayIcon(QSystemTrayIcon):
         menu = QMenu()
 
         toggle_act = menu.addAction("▶  Toggle Listen")
-        toggle_act.triggered.connect(lambda: asyncio.ensure_future(on_toggle()))
+        toggle_act.triggered.connect(
+            lambda: asyncio.ensure_future(on_toggle()).add_done_callback(log_failure)
+        )
 
         enroll_act = menu.addAction("🎤  Enroll Voice")
         enroll_act.triggered.connect(on_enroll)

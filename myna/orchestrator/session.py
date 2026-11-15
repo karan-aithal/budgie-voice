@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from enum import StrEnum
+from typing import Callable
 
 from myna.utils.exceptions import MynaSessionError
 
@@ -45,7 +46,8 @@ class DictationSession:
     Does NOT process audio or run inference.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, on_change: Callable[[SessionState], None] | None = None) -> None:
+        self._on_change = on_change
         self._state = SessionState.IDLE
         self._target_window_id: int | None = None
 
@@ -101,6 +103,11 @@ class DictationSession:
         await self._emit(SessionState.CANCELLED)
         await self._emit(SessionState.IDLE)
 
+    async def to_error(self) -> None:
+        """Any state → ERROR → IDLE. Never raises: this is the way out of a failure."""
+        await self._emit(SessionState.ERROR)
+        await self._emit(SessionState.IDLE)
+
     # ------------------------------------------------------------------
     # Internal
     # ------------------------------------------------------------------
@@ -114,3 +121,8 @@ class DictationSession:
     async def _emit(self, state: SessionState, **kwargs: object) -> None:
         self._state = state
         _LOG.debug("Session state → %s", state)
+        if self._on_change is not None:
+            try:
+                self._on_change(state)
+            except Exception:  # noqa: BLE001 — a broken listener must not wedge the session
+                _LOG.exception("State listener failed on %s", state)

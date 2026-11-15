@@ -16,6 +16,8 @@ from typing import TYPE_CHECKING
 
 import pynput.keyboard
 
+from myna.utils.aio import dispatch
+
 if TYPE_CHECKING:
     from myna.config.settings import ActivationSettings
     from myna.orchestrator.dictation_service import DictationService
@@ -142,7 +144,7 @@ class HotkeyManager:
     # ------------------------------------------------------------------
 
     def _dispatch(self, coro: object) -> None:
-        asyncio.run_coroutine_threadsafe(coro, self._loop)  # type: ignore[arg-type]
+        dispatch(coro, self._loop)  # type: ignore[arg-type]
 
     @staticmethod
     def _normalise(

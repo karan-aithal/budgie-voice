@@ -19,6 +19,8 @@ import logging
 import threading
 from typing import TYPE_CHECKING, Callable
 
+from myna.utils.aio import dispatch
+
 _LOG = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -76,7 +78,7 @@ class MynaDBusService:
 
             @dbus.service.method(_INTERFACE)
             def Toggle(self) -> None:  # noqa: N802
-                asyncio.run_coroutine_threadsafe(service_ref.toggle("dbus"), loop_ref)
+                dispatch(service_ref.toggle("dbus"), loop_ref)
 
             @dbus.service.method(_INTERFACE)
             def Reload(self) -> None:  # noqa: N802

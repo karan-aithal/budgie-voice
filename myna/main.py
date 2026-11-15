@@ -30,6 +30,7 @@ from myna.orchestrator.hotkey import HotkeyManager
 from myna.orchestrator.session import SessionState
 from myna.postprocessing.pipeline import PostProcessingPipeline
 from myna.speaker.verifier import SpeakerVerifier
+from myna.utils.aio import dispatch
 from myna.utils.logging_setup import setup_logging
 
 _LOG = logging.getLogger(__name__)
@@ -173,7 +174,7 @@ async def main_async() -> bool:
                 "Inference settings changed (%s → %s) — hot-reloading backend",
                 old_inf.model, new_inf.model,
             )
-            asyncio.run_coroutine_threadsafe(
+            dispatch(
                 server.reload_backend(
                     new_inf.model,
                     new_inf.device,
@@ -227,7 +228,7 @@ async def main_async() -> bool:
         tray.show()
 
         def _on_cancel_clicked() -> None:
-            asyncio.run_coroutine_threadsafe(dict_svc.cancel(), loop)
+            dispatch(dict_svc.cancel(), loop)
 
         recorder_widget = FloatingRecorderWidget(
             on_cancel=_on_cancel_clicked, style=settings.indicator.visualizer

@@ -65,11 +65,11 @@ class DictationService:
         self._injector = injector
         self._verifier = verifier
         self._settings = settings
-        self._on_state_change = on_state_change
         self._on_low_confidence = on_low_confidence
         self._on_audio_level = on_audio_level
         self._on_preview = on_preview
-        self._session = DictationSession()
+        # The session fires the callback itself, on every transition.
+        self._session = DictationSession(on_change=on_state_change)
         self._last_toggle = 0.0
         self._send_task: asyncio.Task[None] | None = None
         self._recv_task: asyncio.Task[None] | None = None
@@ -182,10 +182,12 @@ class DictationService:
         self._audio_buf.clear()
 
         await self._session.to_starting(window_id)
-        self._adapter.open()
-        await self._session.to_recording()
-        self._send_task = asyncio.create_task(self._send_loop(), name="myna-send")
-        self._fire_state()
+        try:
+            self._adapter.open()
+            await self._session.to_recording()
+            self._send_task = asyncio.create_task(self._send_loop(), name="myna-send")
+        except Exception:  # noqa: BLE001
+            await self._fail("Could not start dictation")
 
     async def _stop_session(self) -> None:
         try:
@@ -193,52 +195,77 @@ class DictationService:
         except MynaSessionError:
             return
 
-        if self._send_task:
-            self._send_task.cancel()
-            await asyncio.gather(self._send_task, return_exceptions=True)
-        self._adapter.close()
-        await asyncio.sleep(0.4)  # drain server buffer
+        try:
+            await self._stop_capture()
+            # Closes the open turn and returns once its segments are in _pending.
+            await self._client.flush(self._settings.inference.finalize_timeout_s)
 
-        inject_ok = await self._verify_speaker()
-        if inject_ok:
-            texts = [self._pipeline.run(seg.text) for seg in self._pending]
-            heard = " ".join(t for t in texts if t)
-            if self._corrections is not None:
-                heard = self._corrections.apply(heard)  # auto-fix known mishears
-            combined = heard
-            if heard and self._on_preview is not None and self._settings.injection.preview_before_inject:
-                combined = await self._on_preview(heard)
-            if combined:
-                _LOG.info("Injecting: %r", combined[:80])
-                await self._injector.start_session(self._session.target_window_id)
-                await self._injector.commit_text(combined)
-                await self._injector.end_session()
-                # heard vs combined diff = the training signal: what ASR got
-                # wrong and what the user actually meant.
-                if self._corrections is not None and combined != heard:
-                    self._corrections.learn(heard, combined)
+            inject_ok = await self._verify_speaker()
+            if inject_ok:
+                texts = [self._pipeline.run(seg.text) for seg in self._pending]
+                heard = " ".join(t for t in texts if t)
+                if self._corrections is not None:
+                    heard = self._corrections.apply(heard)  # auto-fix known mishears
+                combined = heard
+                if heard and self._on_preview is not None and self._settings.injection.preview_before_inject:
+                    combined = await self._on_preview(heard)
+                if combined:
+                    _LOG.info("Injecting %d chars", len(combined))
+                    _LOG.debug("Injecting: %r", combined[:80])
+                    await self._injector.start_session(self._session.target_window_id)
+                    await self._injector.commit_text(combined)
+                    await self._injector.end_session()
+                    # heard vs combined diff = the training signal: what ASR got
+                    # wrong and what the user actually meant.
+                    if self._corrections is not None and combined != heard:
+                        self._corrections.learn(heard, combined)
+                    if self._vocab is not None:
+                        self._vocab.update(combined)
                 if self._vocab is not None:
-                    self._vocab.update(combined)
-            if self._vocab is not None:
-                self._client.set_hotwords(self._vocab.hotwords())
+                    self._client.set_hotwords(self._vocab.hotwords())
 
-        self._pending.clear()
-        self._audio_buf.clear()
-        await self._session.to_completed()
-        self._fire_state()
+            self._pending.clear()
+            self._audio_buf.clear()
+            await self._session.to_completed()
+        except TimeoutError:
+            await self._fail("Transcription timed out — nothing typed")
+        except Exception:  # noqa: BLE001
+            await self._fail("Dictation failed — nothing typed")
 
     async def _cancel_session(self) -> None:
-        if self._send_task:
-            self._send_task.cancel()
-            await asyncio.gather(self._send_task, return_exceptions=True)
-        try:
-            self._adapter.close()
-        except Exception:
-            pass
+        await self._stop_capture()
+        await self._reset_server()
         self._pending.clear()
         self._audio_buf.clear()
         await self._session.to_cancelled()
-        self._fire_state()
+
+    async def _stop_capture(self) -> None:
+        """Stop the send loop and the microphone. Never raises."""
+        if self._send_task:
+            self._send_task.cancel()
+            await asyncio.gather(self._send_task, return_exceptions=True)
+            self._send_task = None
+        try:
+            self._adapter.close()
+        except Exception:  # noqa: BLE001
+            _LOG.exception("Closing the audio adapter failed")
+
+    async def _reset_server(self) -> None:
+        """Drop the server's open turn so it cannot reach the next session. Never raises."""
+        try:
+            await self._client.reset()
+        except Exception as exc:  # noqa: BLE001 — recv loop reconnects a dead socket
+            _LOG.warning("Could not reset inference turn: %s", exc)
+
+    async def _fail(self, what: str) -> None:
+        """Failure exit, called from an ``except`` block: log, clean up, back to IDLE."""
+        _LOG.exception("%s", what)
+        await self._stop_capture()
+        await self._reset_server()
+        self._pending.clear()
+        self._audio_buf.clear()
+        await self._session.to_error()
+        await _notify(self._settings, f"⚠️ {what}")
 
     # ------------------------------------------------------------------
     # Async loops
@@ -266,13 +293,18 @@ class DictationService:
                     if not self._session.is_active or not seg.is_final:
                         continue
                     if seg.confidence < threshold:
-                        _LOG.info("Segment rejected conf=%.2f < %.2f: %r", seg.confidence, threshold, seg.text[:40])
+                        _LOG.info("Segment rejected conf=%.2f < %.2f (%d chars)", seg.confidence, threshold, len(seg.text))
+                        _LOG.debug("Rejected segment: %r", seg.text[:40])
                         await _notify(self._settings, self._settings.notifications.low_confidence_message)
                         if self._on_low_confidence is not None:
                             self._on_low_confidence()
                         continue
-                    _LOG.info("Segment accepted conf=%.2f: %r", seg.confidence, seg.text[:60])
+                    _LOG.info("Segment accepted conf=%.2f (%d chars)", seg.confidence, len(seg.text))
+                    _LOG.debug("Accepted segment: %r", seg.text[:60])
                     self._pending.append(seg)
+                # Iteration ending without an error means the socket closed
+                # cleanly; without this the loop would spin on the dead socket.
+                raise ConnectionError("inference socket closed")
             except asyncio.CancelledError:
                 return
             except Exception as exc:
@@ -305,10 +337,6 @@ class DictationService:
             # Margin guard keeps borderline (possibly impostor) audio out.
             await loop.run_in_executor(None, self._verifier.adapt, audio)
         return is_me
-
-    def _fire_state(self) -> None:
-        if self._on_state_change is not None:
-            self._on_state_change(self._session.state)
 
 
 async def _notify(settings: Settings, message: str) -> None:
