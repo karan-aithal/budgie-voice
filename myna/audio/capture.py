@@ -68,7 +68,10 @@ def _set_bt_default_source(card: str) -> tuple[str | None, str | None]:
             )
             for line in out.splitlines():
                 parts = line.split("\t")
-                if len(parts) >= 2 and parts[1].startswith("bluez_input.") and mac in parts[1]:
+                # PipeWire names the source either with underscores
+                # (bluez_input.AA_BB….headset-head-unit) or with colons
+                # (bluez_input.AA:BB:…) depending on how the headset connected.
+                if len(parts) >= 2 and parts[1].startswith("bluez_input.") and mac in parts[1].replace(":", "_"):
                     subprocess.run(
                         ["pactl", "set-default-source", parts[1]],
                         check=True, timeout=5, capture_output=True,
@@ -127,10 +130,9 @@ class AudioCapture:
         self._queue: asyncio.Queue[np.ndarray] = asyncio.Queue(maxsize=512)
         self._stream: sd.InputStream | None = None
         self._chunk_frames = int(settings.sample_rate * settings.chunk_duration_ms / 1000)
-        self._bt_card: str | None = None       # set once BT profile is pinned for app lifetime
+        self._bt_card: str | None = None       # set while a session holds the BT card in headset mode
         self._bt_restore_profile: str | None = None
         self._prev_default_source: str | None = None
-        self._bt_pinned = False                # True once profile+source switch has run
 
     # ------------------------------------------------------------------
     # Public API
@@ -142,31 +144,37 @@ class AudioCapture:
         Raises:
             RuntimeError: PortAudio fails to open the device.
         """
+        # Chunks captured after the previous session's consumer stopped belong
+        # to that session — never hand them to this one.
+        while not self._queue.empty():
+            self._queue.get_nowait()
+
         device_cfg = self._settings.device
         sd_device: str | int | None
 
         if isinstance(device_cfg, str) and device_cfg.startswith("bt:"):
             card = device_cfg[3:]
             self._bt_card = card
-            if not self._bt_pinned:
-                # Profile switch + SCO renegotiation take up to ~3s on real BT
-                # hardware — pin once for the process lifetime instead of
-                # paying that cost on every session start/stop.
-                self._bt_restore_profile = _get_active_profile(card)
-                for profile in ("headset-head-unit-msbc", "headset-head-unit"):
-                    try:
-                        subprocess.run(
-                            ["pactl", "set-card-profile", card, profile],
-                            check=True, timeout=5, capture_output=True,
-                        )
-                        _LOG.info("BT profile switched for capture: %s → %s", card, profile)
-                        break
-                    except subprocess.CalledProcessError:
-                        continue
-                src, self._prev_default_source = _set_bt_default_source(card)
-                if src:
-                    os.environ["PULSE_SOURCE"] = src  # pin our stream to the BT mic
-                self._bt_pinned = True
+            # A BT headset has one link: A2DP (high-quality playback, no mic) or
+            # HSP/HFP (mic, narrowband playback). The system flips back to A2DP
+            # on its own mid-session unless the profile *and* the mic source are
+            # both pinned, so do it every session and give the link back in stop().
+            self._bt_restore_profile = _get_active_profile(card)
+            for profile in ("headset-head-unit-msbc", "headset-head-unit"):
+                try:
+                    subprocess.run(
+                        ["pactl", "set-card-profile", card, profile],
+                        check=True, timeout=5, capture_output=True,
+                    )
+                    _LOG.info("BT profile switched for capture: %s → %s", card, profile)
+                    break
+                except subprocess.CalledProcessError as exc:
+                    _LOG.warning("BT profile %s failed: %s", profile, exc.stderr.decode(errors="replace").strip())
+            src, self._prev_default_source = _set_bt_default_source(card)
+            if not src:
+                self.release_bt()
+                raise RuntimeError(f"Headset mic not available (card {card} stayed on a playback profile)")
+            os.environ["PULSE_SOURCE"] = src  # pin our stream to the BT mic
             sd_device = "pulse"
         elif isinstance(device_cfg, str) and device_cfg.startswith("pa:"):
             source = device_cfg[3:]
@@ -201,17 +209,17 @@ class AudioCapture:
             raise RuntimeError(f"Failed to open microphone: {exc}") from exc
 
     def stop(self) -> None:
-        """Stop the microphone stream. Leaves the BT profile pinned (see
-        :meth:`release_bt`) so the next session doesn't re-pay the switch cost."""
+        """Stop the microphone stream and hand a BT headset back to playback quality."""
         if self._stream is not None:
             self._stream.stop()
             self._stream.close()
             self._stream = None
             _LOG.info("Mic capture stopped")
+        self.release_bt()
 
     def release_bt(self) -> None:
-        """Restore the BT card's original profile/default source. Call once
-        at app shutdown, not between sessions."""
+        """Restore the BT card's playback profile and default source. No-op when
+        no session holds the card, so safe to call again at shutdown."""
         if self._bt_card:
             os.environ.pop("PULSE_SOURCE", None)
             _restore_bt_profile(self._bt_card, self._bt_restore_profile)
@@ -219,7 +227,6 @@ class AudioCapture:
             self._bt_card = None
             self._bt_restore_profile = None
             self._prev_default_source = None
-            self._bt_pinned = False
 
     @property
     def queue(self) -> asyncio.Queue[np.ndarray]:
