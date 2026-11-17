@@ -359,6 +359,10 @@ def _make_pipeline(settings: Settings) -> PostProcessingPipeline:
         auto_capitalize=pp.auto_capitalize,
         punctuation_commands=pp.punctuation_commands,
         language_cleanup=pp.language_cleanup,
+        strip_fillers=pp.strip_fillers,
+        spoken_edits=pp.spoken_edits,
+        strip_trailing_period=pp.strip_trailing_period,
+        snippets=pp.snippets or None,  # a bare `snippets:` in YAML is None
     )
 
 

@@ -331,7 +331,7 @@ budgie_voice/
 │   ├── normalizer.py              # "twenty two" → "22"
 │   ├── punctuation.py             # "period" → "."
 │   ├── capitalizer.py             # Sentence-start capitalisation
-│   ├── language_cleanup.py        # "gonna" → "going to"
+│   ├── language_cleanup.py        # "gonna" → "going to"; optional filler removal
 │   └── pipeline.py                # Chains all processors
 ├── injection/
 │   ├── base.py                    # TextOutputBackend ABC (versioned)

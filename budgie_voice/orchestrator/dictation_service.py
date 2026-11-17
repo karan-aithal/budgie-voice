@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Callable
@@ -17,11 +19,13 @@ from budgie_voice.audio.adapter import AudioAdapter
 from budgie_voice.audio.spectrum import AudioLevel, analyze
 from budgie_voice.config.settings import Settings
 from budgie_voice.injection.base import TextOutputBackend
+from budgie_voice.injection.secure import SecureFieldDetector
 from budgie_voice.injection.xdotool import _get_focused_window
 from budgie_voice.orchestrator.session import DictationSession, SessionState
 from budgie_voice.orchestrator.corrections import CorrectionMemory
 from budgie_voice.orchestrator.vocab import PersonalVocab
 from budgie_voice.postprocessing.pipeline import PostProcessingPipeline
+from budgie_voice.utils import media
 from budgie_voice.utils.exceptions import BudgieSessionError
 from budgie_voice.utils.notify import notify as _notify  # tests patch this name
 
@@ -77,6 +81,9 @@ class DictationService:
         self._pending: list[TranscriptSegment] = []
         self._last_transcript = ""  # memory only, never written to disk
         self._audio_buf: list[np.ndarray] = []
+        self._profile: dict[str, object] | None = None  # per-app overrides, set per session
+        self._wayland_profile_logged = False
+        self._paused_players: list[str] = []  # media we paused, to resume at the end
         self._vocab: PersonalVocab | None = None
         if settings.learning.vocab_enabled:
             self._vocab = PersonalVocab(Path(settings.learning.vocab_path).expanduser())
@@ -209,9 +216,14 @@ class DictationService:
         self._pending.clear()
         self._audio_buf.clear()
         self._refresh_hotwords()  # picks up dictionary edits without a restart
+        self._profile = self._resolve_profile(window_id)
 
         await self._session.to_starting(window_id)
         try:
+            if self._settings.activation.pause_media:
+                self._paused_players = await asyncio.get_running_loop().run_in_executor(
+                    None, media.pause_playing
+                )
             # pactl / BT profile switch / PortAudio block for up to seconds: keep them off the loop.
             await asyncio.get_running_loop().run_in_executor(None, self._adapter.open)
             await self._session.to_recording()
@@ -239,7 +251,8 @@ class DictationService:
             if inject_ok:
                 # One pipeline pass over the whole dictation: per-segment passes put a
                 # full stop and a capital at every pause.
-                heard = self._pipeline.run(" ".join(seg.text for seg in self._pending if seg.text))
+                pipeline = self._pipeline.with_overrides(self._profile) if self._profile else self._pipeline
+                heard = pipeline.run(" ".join(seg.text for seg in self._pending if seg.text))
                 if self._corrections is not None:
                     heard = self._corrections.apply(heard)  # auto-fix known mishears
                 combined = heard
@@ -288,6 +301,34 @@ class DictationService:
             await asyncio.get_running_loop().run_in_executor(None, self._adapter.close)
         except Exception:  # noqa: BLE001
             _LOG.exception("Closing the audio adapter failed")
+        if self._paused_players:  # every way a session ends passes through here
+            players, self._paused_players = self._paused_players, []
+            await asyncio.get_running_loop().run_in_executor(None, media.resume, players)
+
+    def _resolve_profile(self, window_id: int | None) -> dict[str, object] | None:
+        """Per-app overrides for this session: first profile whose regex hits the window's WM_CLASS.
+
+        X11 only — on Wayland there is no WM_CLASS to read, so the default profile applies.
+        """
+        profiles = self._settings.postprocessing.profiles
+        if not profiles:
+            return None
+        if os.environ.get("XDG_SESSION_TYPE") == "wayland":
+            if not self._wayland_profile_logged:
+                self._wayland_profile_logged = True
+                _LOG.info("Per-app profiles need X11 (no WM_CLASS on Wayland) — default profile applies")
+            return None
+        if window_id is None:
+            return None
+        wm_class = SecureFieldDetector._xprop(window_id, "WM_CLASS")  # noqa: SLF001 — shared xprop helper
+        for profile in profiles:
+            try:
+                if re.search(str(profile["match"]), wm_class, re.IGNORECASE):
+                    _LOG.info("Profile %r applies", profile["match"])
+                    return {k: v for k, v in profile.items() if k != "match"}
+            except (KeyError, re.error) as exc:
+                _LOG.warning("Ignoring bad profile %r (%s: %s)", profile, type(exc).__name__, exc)
+        return None
 
     async def _reset_server(self) -> None:
         """Drop the server's open turn so it cannot reach the next session. Never raises."""

@@ -80,8 +80,50 @@ _MULTI_SPACE = re.compile(r"  +")
 
 
 # ---------------------------------------------------------------------------
-# Public class
+# Public classes
 # ---------------------------------------------------------------------------
+
+# Letters on purpose: the capitaliser must treat a held-back snippet as a word
+# (so it doesn't capitalise whatever follows); restore() matches case-insensitively.
+_SNIPPET_MARK = "zqsnip{}zq"
+_SNIPPET_RE = re.compile(r"zqsnip(\d+)zq", re.IGNORECASE)
+
+
+class SnippetProcessor:
+    """Swap spoken phrases for fixed text (``"my email"`` → an address).
+
+    Matches like the punctuation commands: whole phrase (``\\b…\\b``),
+    case-insensitive, longest first. The replacement is held back as a marker
+    until :meth:`restore`, so no later step (numbers, punctuation commands,
+    capitalisation, filler removal) can alter it.
+
+    Args:
+        snippets: Spoken phrase → replacement text. Empty/None = passthrough.
+    """
+
+    def __init__(self, snippets: dict[str, str] | None = None) -> None:
+        items = sorted(
+            ((k.strip(), str(v)) for k, v in (snippets or {}).items() if k and k.strip()),
+            key=lambda kv: len(kv[0]),
+            reverse=True,
+        )
+        self._texts = [v for _, v in items]
+        self._subs = [
+            (re.compile(r"\b" + re.escape(k) + r"\b", re.IGNORECASE), _SNIPPET_MARK.format(i))
+            for i, (k, _) in enumerate(items)
+        ]
+
+    def apply(self, text: str) -> str:
+        """Replace each spoken phrase with a marker for its text."""
+        for pat, mark in self._subs:
+            text = pat.sub(mark, text)
+        return text
+
+    def restore(self, text: str) -> str:
+        """Put the snippet texts in place of their markers."""
+        if not self._subs:
+            return text
+        return _SNIPPET_RE.sub(lambda m: self._texts[int(m.group(1))], text)
 
 
 class PunctuationProcessor:

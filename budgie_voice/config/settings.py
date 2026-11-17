@@ -46,6 +46,10 @@ class ActivationSettings:
     # so it stays a knob: raise it if repeats still slip through.
     debounce_ms: int = 350
 
+    # Pause whatever is playing (via playerctl) while dictating, resume after.
+    # Without playerctl this does nothing.
+    pause_media: bool = False
+
     def resolved_trigger(self) -> Literal["pynput", "evdev", "dbus"]:
         """Resolve ``"auto"`` against the current session type.
 
@@ -116,7 +120,7 @@ class InferenceSettings:
     model: str = "small"
     device: str = "auto"
     compute_type: str = "int8"
-    language: str = "en"
+    language: str = "en"  # BCP-47 code, or "auto" (Whisper detects it; Parakeet uses en)
     confidence_threshold: float = 0.40
     beam_size: int = 3
     # Max wait at stop for the last turn's transcription before giving up.
@@ -162,6 +166,20 @@ class PostprocessingSettings:
     auto_capitalize: bool = True
     punctuation_commands: bool = True
     language_cleanup: bool = True
+    # Remove um/uh/er/hmm. Off: it can't tell a filler from a deliberate "hm".
+    strip_fillers: bool = False
+    # Spoken "scratch that" deletes the sentence before it.
+    spoken_edits: bool = True
+    # Drop one final "." — for terminals and code editors, via profiles below.
+    strip_trailing_period: bool = False
+    # Spoken phrase -> replacement text, e.g. {"my email": "me@example.com"}. Whole
+    # phrase, case-insensitive; the text is inserted exactly as written.
+    snippets: dict[str, str] = field(default_factory=dict)
+    # Per-app overrides, X11 only. First entry whose `match` regex hits the target
+    # window's WM_CLASS wins; every other key overrides the toggle of that name
+    # (normalize_numbers, auto_capitalize, punctuation_commands, language_cleanup,
+    # strip_fillers, spoken_edits, strip_trailing_period). See config.yaml.example.
+    profiles: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass

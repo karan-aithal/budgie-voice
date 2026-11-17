@@ -15,6 +15,7 @@ activation:
                           #   sudo usermod -aG input $USER   (then log out and in)
                           # Only the owner may toggle — prevents one press firing twice.
   debounce_ms: 350        # Drop a repeat from the same source inside this window
+  pause_media: false      # pause what is playing (needs playerctl) while dictating, resume after
 
 audio:
   devices: []             # ordered preference, first that works wins; [] = Auto (built-in mic first)
@@ -35,7 +36,7 @@ inference:
   model: "small"               # tiny | small | medium | large-v3 (or .en variants)
   device: "auto"                # "auto" | "cpu" | "cuda"
   compute_type: "int8"
-  language: "en"
+  language: "en"                # BCP-47 code, or "auto": Whisper detects it, Parakeet logs once and uses en
   confidence_threshold: 0.40
   beam_size: 3
   finalize_timeout_s: 15        # max wait at stop for the last turn's transcription
@@ -51,6 +52,24 @@ learning:
   vocab_enabled: true
   corrections_enabled: true
   dictionary_path: "~/.config/budgie-voice/dictionary.txt"   # your names/jargon, one per line
+
+postprocessing:
+  strip_fillers: false          # remove um / uh / er / hmm
+  spoken_edits: true            # "scratch that" deletes the sentence before it
+  strip_trailing_period: false  # drop one final "." (mainly useful in profiles below)
+  snippets: {}                  # spoken phrase -> text, inserted exactly as written
+  # snippets:
+  #   my email: "me@example.com"
+  #   sign off: "Best regards,\nKaran"
+  profiles: []                  # per-app overrides, X11 only. First `match` (regex on WM_CLASS) wins;
+                                # other keys override the toggle of the same name.
+  # profiles:
+  #   - match: "terminal|konsole|alacritty|kitty|xterm"   # terminals: no capital, no final period
+  #     auto_capitalize: false
+  #     strip_trailing_period: true
+  #   - match: "code|jetbrains|sublime|emacs|vim"          # code editors
+  #     auto_capitalize: false
+  #     strip_trailing_period: true
 
 injection:
   backend: "auto"         # "auto" | "ydotool" | "xdotool"

@@ -164,7 +164,7 @@ class FasterWhisperBackend(InferenceBackend):
     ) -> list[TranscriptSegment]:
         segments_iter, info = self._model.transcribe(  # type: ignore[union-attr]
             audio,
-            language=language,
+            language=None if language == "auto" else language,  # None = Whisper detects it
             hotwords=hotwords,
             beam_size=self._beam_size,
             without_timestamps=True,

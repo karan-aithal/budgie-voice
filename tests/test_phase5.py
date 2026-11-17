@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import re
 import traceback
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -56,6 +57,28 @@ def _unknown_keys(data: dict, cls: type, path: str = "") -> list[str]:
 def test_example_config_has_no_unknown_keys() -> None:
     example = Path(__file__).parent.parent / "config.yaml.example"
     assert _unknown_keys(yaml.safe_load(example.read_text()), Settings) == []
+
+
+def test_readme_settings_table_matches_settings() -> None:
+    """Every `key` | `default` row in the README names a real setting with that default."""
+    readme = (Path(__file__).parent.parent / "README.md").read_text()
+    rows = re.findall(r"^\| `([a-z_]+\.[a-z_]+)` \| `([^`]*)` \|", readme, re.MULTILINE)
+    assert rows
+    for key, shown in rows:
+        section, name = key.split(".")
+        actual = getattr(getattr(Settings(), section), name)  # AttributeError = stale README key
+        if isinstance(actual, bool):
+            assert shown == str(actual).lower(), key
+        elif actual is None:
+            assert shown == "null", key
+        elif isinstance(actual, list):
+            assert shown == "[]" and actual == [], key
+        elif isinstance(actual, dict):
+            assert shown == "{}" and actual == {}, key
+        elif isinstance(actual, (int, float)):
+            assert float(shown) == actual, key
+        else:
+            assert shown == actual, key
 
 
 # -- live backend swap ------------------------------------------------------

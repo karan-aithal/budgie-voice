@@ -29,6 +29,7 @@ _LOG = logging.getLogger(__name__)
 _MODELS_DIR = Path.home() / ".local" / "share" / "budgie-voice" / "models" / "parakeet"
 _SUPPORTED_MODELS = ["nemo-parakeet-tdt-0.6b-v3", "nemo-parakeet-tdt-0.6b-v2", "nemo-parakeet-rnnt-0.6b"]
 _SUPPORTED_LANGUAGES = ["en"]  # v3 is English-only; multilingual presets exist but untested here
+_AUTO_LOGGED = False
 
 
 class ParakeetBackend(InferenceBackend):
@@ -148,6 +149,12 @@ class ParakeetBackend(InferenceBackend):
             raise RuntimeError(f"Failed to load Parakeet model '{model}': {exc}") from exc
 
     def _transcribe_sync(self, audio: np.ndarray, language: str) -> TranscriptSegment | None:
+        if language == "auto":
+            global _AUTO_LOGGED  # noqa: PLW0603
+            if not _AUTO_LOGGED:
+                _AUTO_LOGGED = True
+                _LOG.info("Parakeet cannot detect the language; language=auto uses its default (en)")
+            language = "en"
         text: str = self._model.recognize(audio, sample_rate=16_000)  # type: ignore[union-attr]
         text = text.strip()
         if not text:
