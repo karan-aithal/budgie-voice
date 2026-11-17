@@ -14,7 +14,7 @@ pytest.importorskip("PyQt6.QtWidgets")
 from PyQt6.QtCore import QPoint, Qt  # noqa: E402
 from PyQt6.QtGui import QColor, QFontInfo, QPalette  # noqa: E402
 from PyQt6.QtTest import QTest  # noqa: E402
-from PyQt6.QtWidgets import QApplication, QPushButton  # noqa: E402
+from PyQt6.QtWidgets import QApplication, QLabel, QPushButton, QWidget  # noqa: E402
 
 from budgie_voice.config.settings import Settings  # noqa: E402
 from budgie_voice.indicator.preview_widget import PreviewWidget  # noqa: E402
@@ -117,6 +117,9 @@ def test_app_icon_is_on_settings_and_wizard_only(app) -> None:
     wizard = EnrollmentWizard(SpeakerVerifier("/nonexistent/voiceprint.pt"))
     assert not w.windowIcon().isNull() and not wizard.windowIcon().isNull()
     assert not w.windowIcon().pixmap(32, 32).isNull()
+    for win in (w, wizard):  # the icon is also drawn inside the window, not only in a title bar
+        logo = win.findChild(QWidget, "brand").findChildren(QLabel)[0]
+        assert not logo.pixmap().isNull()
     assert FloatingRecorderWidget(on_cancel=lambda: None).windowIcon().isNull()
     assert PreviewWidget().windowIcon().isNull()
 

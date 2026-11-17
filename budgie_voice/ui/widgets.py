@@ -10,7 +10,7 @@ from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPalette, QPen
 from PyQt6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from budgie_voice.ui.status import Status
-from budgie_voice.ui.style import mix, ui_font
+from budgie_voice.ui.style import app_icon, mix, ui_font
 from budgie_voice.ui.theme import status_color
 
 SPACING = 12   # between controls
@@ -119,6 +119,26 @@ class StatusRow(QWidget):
         self._dot.set_status(status)
         label = word or status.value
         self._value.setText(f"{label} — {detail}" if detail else label)
+
+
+def brand(left: int = 0) -> QWidget:
+    """The app icon with its name, for the top of a window's side column."""
+    box = QWidget()
+    box.setObjectName("brand")
+    row = QHBoxLayout(box)
+    row.setContentsMargins(left, 0, 0, 0)
+    row.setSpacing(10)
+    logo = QLabel()
+    logo.setFixedSize(32, 32)
+    pm = app_icon().pixmap(64, 64)
+    pm.setDevicePixelRatio(2)
+    logo.setPixmap(pm)
+    name = QLabel("Budgie")
+    name.setFont(ui_font(16, _Medium))
+    row.addWidget(logo)
+    row.addWidget(name)
+    row.addStretch()
+    return box
 
 
 def card(*rows: QWidget) -> QFrame:

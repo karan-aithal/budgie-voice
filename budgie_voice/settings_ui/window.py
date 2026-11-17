@@ -46,7 +46,7 @@ from budgie_voice.ui.status import RuntimeStatus
 from budgie_voice.ui.icons import pixmap
 from budgie_voice.ui.style import apply_scope, set_icon
 from budgie_voice.ui.theme import sync_theme
-from budgie_voice.ui.widgets import SPACING, Switch, heading, muted, page, section
+from budgie_voice.ui.widgets import SPACING, Switch, brand, heading, muted, page, section
 
 _LOG = logging.getLogger(__name__)
 _CONFIG_PATH = Path.home() / ".config" / "budgie-voice" / "config.yaml"
@@ -177,9 +177,16 @@ class SettingsWindow(QDialog):
         divider.setFrameShape(QFrame.Shape.VLine)
         divider.setFrameShadow(QFrame.Shadow.Sunken)
 
+        side = QVBoxLayout()  # app icon + name above the section list
+        side.setSpacing(0)
+        side.addSpacing(16)
+        side.addWidget(brand(left=20))  # 20 = the nav rows' icon edge
+        side.addSpacing(4)
+        side.addWidget(self._nav)
+
         body = QHBoxLayout()
         body.setSpacing(0)
-        body.addWidget(self._nav)
+        body.addLayout(side)
         body.addWidget(divider)
         body.addWidget(scroll, stretch=1)
 

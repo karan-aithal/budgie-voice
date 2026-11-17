@@ -29,6 +29,10 @@ _BTN_GAP = 4                    # extra px between a button's icon and its label
 _NAV_GAP = 6                    # extra px between a nav icon and its label
 
 
+def app_icon() -> QIcon:
+    return QIcon(str(_ASSETS / "budgie.svg"))
+
+
 def ui_font(px: int = 13, weight: QFont.Weight = QFont.Weight.Normal) -> QFont:
     """Ubuntu at *px* pixels, falling back through the families above to the desktop default."""
     font = QFont()
@@ -233,7 +237,7 @@ def _round_popup(combo: QComboBox) -> None:
 def apply_scope(root: QWidget) -> None:
     """Font, window icon, stylesheet and icon colours for *root* and its descendants only. Call once, last in __init__."""
     root.setFont(ui_font(13))
-    root.setWindowIcon(QIcon(str(_ASSETS / "budgie.svg")))  # per window: the recorder/preview keep none
+    root.setWindowIcon(app_icon())  # per window: the recorder/preview keep none
     for combo in root.findChildren(QComboBox):
         _round_popup(combo)
     _Scope(root)

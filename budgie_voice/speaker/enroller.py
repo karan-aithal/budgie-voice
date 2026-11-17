@@ -47,7 +47,7 @@ from budgie_voice.ui.status import Status
 from budgie_voice.ui.icons import pixmap
 from budgie_voice.ui.style import apply_scope, set_icon, ui_font
 from budgie_voice.ui.theme import apply_theme
-from budgie_voice.ui.widgets import SPACING, StatusRow, muted
+from budgie_voice.ui.widgets import SPACING, StatusRow, brand, muted
 
 _LOG = logging.getLogger(__name__)
 
@@ -72,6 +72,8 @@ class _Steps(QWidget):
         col = QVBoxLayout(self)
         col.setContentsMargins(SPACING, 2 * SPACING, SPACING, SPACING)
         col.setSpacing(SPACING)
+        col.addWidget(brand())
+        col.addSpacing(SPACING)
         for glyph, label in zip(self._glyphs, self._labels):
             row = QHBoxLayout()
             row.setSpacing(8)
