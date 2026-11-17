@@ -77,6 +77,9 @@ injection:
   backend: "auto"         # "auto" | "ydotool" | "xdotool"
   delay_ms: 12            # xdotool/ydotool keystroke delay
   preview_before_inject: true
+  progressive: false      # Type each turn while you speak (turns close after inference.min_turn_s).
+                          # Only takes effect with preview_before_inject: false AND speaker.enabled:
+                          # false; otherwise it is ignored and a notification says why.
 
 # Optional local LLM (LM Studio or Ollama). Off by default; dictation never depends on it.
 # llm:

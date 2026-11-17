@@ -64,6 +64,7 @@ Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int
 | `inference.min_turn_s` | `15` | A pause closes a turn only once it holds this much audio, so short dictations are transcribed in one pass; longer ones stream turn by turn |
 | `learning.dictionary_path` | `~/.config/budgie-voice/dictionary.txt` | Your names and jargon, one per line (`#` comments allowed), sent to the decoder as hotwords together with words you corrected in the preview. Whisper uses them; Parakeet ignores hotwords |
 | `injection.backend` | `auto` | `auto` \| `ydotool` \| `xdotool` |
+| `injection.progressive` | `false` | Type each turn while you speak instead of everything at stop. Needs the preview **and** speaker verification off, never bypasses either — see [Progressive typing](#progressive-typing-optional) |
 | `llm.enabled` | `false` | Optional local LLM (LM Studio or Ollama): **polish** (drops fillers and false starts, applies spoken self-corrections, fixes punctuation) and **command mode**. Off = no import, no network call. If the server is down, slow or answers badly, the unpolished text is used |
 | `llm.url` | `http://127.0.0.1:1234/v1` | OpenAI-style base URL, as LM Studio shows it (Ollama: `http://127.0.0.1:11434/v1`). Budgie calls `<url>/chat/completions`. **Dictated text must not leave the machine by accident:** a host that is not loopback (127.0.0.0/8, `::1`, `localhost`) is refused at startup, with a log line, unless `llm.allow_remote` is `true`. Redirects and proxies are never followed |
 | `llm.model` | *(none)* | The model id your server lists (`curl <llm.url>/models`), e.g. `qwen/qwen3.5-4b`. Must be set. Budgie asks reasoning models (Qwen3.x) not to think (`reasoning_effort: none`); a server that ignores that will usually exceed `timeout_s` and fall back to the unpolished text |
@@ -98,6 +99,35 @@ your machine: the URL must be loopback unless you set `llm.allow_remote: true`.
   next to the original.
 - Prompts and answers are transcript text: logged at `DEBUG` only. The log line `Stop-to-preview`
   gives the time from stop to preview, with `llm=on|off`.
+
+### Progressive typing (optional)
+
+`injection.progressive: true` types each turn as soon as it is transcribed, instead of everything
+at stop. It is **off by default** and gated by safety checks that no setting can override:
+
+- It stays off while `injection.preview_before_inject` is on: the preview is never bypassed.
+- It stays off while `speaker.enabled` is on: text would be typed before the speaker is verified.
+  To use it, set `speaker.enabled: false` and `injection.preview_before_inject: false` yourself.
+- It never applies to command mode.
+
+When a gate blocks it, Budgie logs the reason and shows one notification, then dictates as usual.
+
+How it behaves:
+
+- **Turn size.** A turn closes at a pause once it holds `inference.min_turn_s` of audio (15 s by
+  default), so text arrives in chunks of at least that length, not word by word.
+- **Append-only.** Typed text is never edited or retracted. Turns are typed in order, once each,
+  joined by a single space. Stop types only what was not typed yet.
+- **Cancel** keeps everything already typed (Budgie never deletes it) and tells you how many
+  characters stay.
+- **Per-turn processing.** Number, capitalisation and punctuation rules and known-mishear
+  corrections run on each turn. "Scratch that" only reaches back within its own turn.
+  `strip_trailing_period` applies to every turn. Preview-edit learning and LLM polish do not apply.
+- **Focus.** Every turn is typed into the window that had focus when you started, and Budgie
+  re-activates that window before typing. Switch windows mid-dictation and the next turn pulls
+  focus back to the original one.
+- **Typing fails** (window gone, tool error): you get a notification, later turns are not typed out
+  of order, and the whole dictation stays available under tray → Copy Last Transcript.
 
 ### Hotkey on Wayland vs X11
 

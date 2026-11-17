@@ -196,6 +196,13 @@ class InjectionSettings:
     block_secure_fields: bool = True
     preview_before_inject: bool = True
 
+    # Type each turn the server closes as soon as it is transcribed, instead of everything
+    # at stop. Committed text is append-only: never edited, never retracted. Safety gates,
+    # not preferences: it stays off while the preview is on (the preview is never bypassed)
+    # or speaker verification is on (it would type before the speaker is checked), and it
+    # never applies to command mode. Turns close only after inference.min_turn_s of audio.
+    progressive: bool = False
+
 
 @dataclass
 class LlmSettings:
