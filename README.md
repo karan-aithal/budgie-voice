@@ -43,13 +43,20 @@ Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int
 | Key | Default | Description |
 |---|---|---|
 | `activation.hotkey` | `ctrl+space` | Global hotkey (pynput format) — used when `trigger` is `pynput` |
+| `activation.evdev_hotkey` | `f9` | Same `a+b` format — used when `trigger` is `evdev`. Pick a key applications ignore, see below |
 | `activation.mode` | `toggle` | `toggle` \| `push_to_hold` |
-| `activation.trigger` | `auto` | Who owns the hotkey: `auto` \| `pynput` \| `dbus` — see below |
+| `activation.trigger` | `auto` | Who owns the hotkey: `auto` \| `pynput` \| `evdev` \| `dbus` — see below |
 | `activation.debounce_ms` | `350` | Ignore a repeat from the same source within this window |
+| `activation.pause_media` | `false` | Pause what is playing while you dictate and resume it after, via `playerctl` (only the players that were playing). Without `playerctl` it does nothing |
+| `postprocessing.snippets` | `{}` | Spoken phrase → replacement text, e.g. `my email: "me@example.com"`. Whole phrase, case-insensitive, longest first, applied before punctuation commands. The text is inserted exactly as written — a snippet containing "comma" stays "comma" |
+| `postprocessing.strip_fillers` | `false` | Remove um / uh / er / hmm |
+| `postprocessing.spoken_edits` | `true` | Saying "scratch that" deletes the sentence before it. Only when the phrase ends its own sentence — "scratch that itch" is left alone |
+| `postprocessing.strip_trailing_period` | `false` | Drop one final `.` (an ellipsis stays) |
+| `postprocessing.profiles` | `[]` | Per-app overrides, **X11 only**: a list of `match` (regex tested against the target window's `WM_CLASS`) plus any of `normalize_numbers`, `auto_capitalize`, `punctuation_commands`, `language_cleanup`, `strip_fillers`, `spoken_edits`, `strip_trailing_period`. First match wins, resolved once at session start. On Wayland the default settings apply (logged once). Examples for terminals and code editors in [`config.yaml.example`](config.yaml.example) |
 | `inference.model` | `small` | A model of the chosen backend (Settings lists them): Whisper `tiny`…`large-v3`, or `nemo-parakeet-*`. An unknown backend or model falls back to `faster_whisper`/`small` with a notification |
 | `inference.backend` | `faster_whisper` | `faster_whisper` \| `parakeet` |
 | `inference.device` | `auto` | `auto` \| `cpu` \| `cuda` |
-| `inference.language` | `en` | BCP-47 language code |
+| `inference.language` | `en` | BCP-47 language code, or `auto`: Whisper detects the language; Parakeet can't, so it logs that once and uses `en` |
 | `inference.confidence_threshold` | `0.40` | Discard segments below this. Skipped for backends that do not measure confidence (Parakeet) |
 | `inference.beam_size` | `3` | Whisper beam size (1 = fastest greedy) |
 | `inference.finalize_timeout_s` | `15` | Max wait at stop for the last turn's transcription; on timeout nothing is typed |
