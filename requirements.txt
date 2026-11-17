@@ -35,7 +35,6 @@ torch>=2.0.0
 torchaudio>=2.0.0
 # Silero VAD is loaded via torch.hub — no pip package required
 speechbrain>=1.0.0
-huggingface-hub>=0.24.0
 
 # ── Numerics ──────────────────────────────────────────────────────────────────
 numpy>=1.26.0

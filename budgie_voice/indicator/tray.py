@@ -13,8 +13,9 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Callable
 
-from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QColor, QIcon
+from PyQt6.QtCore import QByteArray, Qt, QTimer
+from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
+from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
 from budgie_voice.ui.icons import icon as lucide
@@ -26,6 +27,23 @@ _ICONS_DIR = Path(__file__).parent / "icons"
 # GNOME renders this menu in the shell, in its own dark colours, so menu glyphs use a fixed mid-grey
 # that reads on both dark and light menus instead of following the app palette.
 _GLYPH = QColor("#8e8e93")
+
+
+def _state_icon(color: str) -> QIcon:
+    """The coloured mic. Red is green.svg with another fill, so there is no red.svg to keep in sync."""
+    if color != "red":
+        return QIcon(str(_ICONS_DIR / f"{color}.svg"))
+    svg = (_ICONS_DIR / "green.svg").read_text().replace("#47B02B", "#FF4141")
+    renderer = QSvgRenderer(QByteArray(svg.encode()))
+    icon = QIcon()
+    for size in (16, 22, 24, 32, 48, 64):  # the sizes tray hosts ask for
+        px = QPixmap(size, size)
+        px.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(px)
+        renderer.render(painter)
+        painter.end()
+        icon.addPixmap(px)
+    return icon
 
 
 def _glyph(name: str) -> QIcon:
@@ -137,7 +155,7 @@ class TrayIcon(QSystemTrayIcon):
 
     def _update_icon(self, state: TrayState) -> None:
         color, tooltip = _STATE_CONFIG.get(state, ("blue", "Budgie"))
-        self.setIcon(QIcon(str(_ICONS_DIR / f"{color}.svg")))  # type: ignore[call-arg]
+        self.setIcon(_state_icon(color))
         self.setToolTip(tooltip)
         # Menu text follows what is shown, including the 2 s COMPLETED/ERROR flashes.
         self._status_act.setText(tooltip)
