@@ -253,6 +253,14 @@ class DictationService:
         return self._last_transcript
 
     @property
+    def typed_chars(self) -> int:
+        """Characters typed into the target by the current or last session (0 if none).
+
+        A count only, never text: Settings → Overview shows it next to each dictation.
+        """
+        return self._typed_chars
+
+    @property
     def state(self) -> SessionState:
         return self._session.state
 
@@ -343,6 +351,7 @@ class DictationService:
                     _LOG.debug("Injecting: %r", combined[:80])
                     await self._injector.start_session(self._session.target_window_id)
                     await self._injector.commit_text(combined)
+                    self._typed_chars = len(combined)  # same counter progressive typing keeps
                     await self._injector.end_session()
                     # heard vs combined diff = the training signal: what ASR got
                     # wrong and what the user actually meant. Only when the user edited

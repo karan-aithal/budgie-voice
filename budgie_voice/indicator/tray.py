@@ -17,6 +17,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
+from budgie_voice.ui.theme import themed_icon
 from budgie_voice.utils.aio import log_failure
 
 _LOG = logging.getLogger(__name__)
@@ -38,18 +39,23 @@ class TrayState(StrEnum):
     ERROR = "error"
 
 
-# icon color, tooltip
+# icon color, tooltip. The tooltip is also the status line at the top of the menu, because
+# GNOME's tray often never shows tooltips.
 _STATE_CONFIG: dict[TrayState, tuple[str, str]] = {
-    TrayState.IDLE:           ("blue", "Budgie — idle"),
+    TrayState.IDLE:           ("blue", "Budgie — ready to dictate"),
     TrayState.STARTING:       ("yellow", "Budgie — starting…"),
-    TrayState.RECORDING:      ("green", "Budgie — recording"),
-    TrayState.TRANSCRIBING:   ("purple", "Budgie — transcribing"),
-    TrayState.FINALIZING:     ("purple", "Budgie — finalizing"),
+    TrayState.RECORDING:      ("green", "Budgie — listening"),
+    TrayState.TRANSCRIBING:   ("purple", "Budgie — transcribing…"),
+    TrayState.FINALIZING:     ("purple", "Budgie — finishing…"),
     TrayState.COMPLETED:      ("green", "Budgie — done"),
     TrayState.LOW_CONFIDENCE: ("orange", "Budgie — couldn't hear clearly"),
     TrayState.CANCELLED:      ("blue", "Budgie — cancelled"),
-    TrayState.ERROR:          ("red", "Budgie — error (see log)"),
+    TrayState.ERROR:          ("red", "Budgie — something went wrong (see log)"),
 }
+
+# The Toggle action is the same action in every state; only its wording follows what it will do.
+_STOP_STATES = frozenset({TrayState.STARTING, TrayState.RECORDING})
+_BUSY_STATES = frozenset({TrayState.TRANSCRIBING, TrayState.FINALIZING})
 
 
 class TrayIcon(QSystemTrayIcon):
@@ -126,6 +132,17 @@ class TrayIcon(QSystemTrayIcon):
         color, tooltip = _STATE_CONFIG.get(state, ("blue", "Budgie"))
         self.setIcon(QIcon(str(_ICONS_DIR / f"{color}.svg")))  # type: ignore[call-arg]
         self.setToolTip(tooltip)
+        # Menu text follows what is shown, including the 2 s COMPLETED/ERROR flashes.
+        self._status_act.setText(tooltip)
+        if state in _STOP_STATES:
+            self._toggle_act.setText("Stop Dictation")
+            self._toggle_act.setIcon(themed_icon("media-playback-stop-symbolic"))
+        elif state in _BUSY_STATES:
+            self._toggle_act.setText("Finishing…")
+            self._toggle_act.setIcon(themed_icon("content-loading-symbolic"))
+        else:
+            self._toggle_act.setText("Start Dictation")
+            self._toggle_act.setIcon(themed_icon("media-playback-start-symbolic"))
 
     def _build_menu(
         self,
@@ -141,24 +158,29 @@ class TrayIcon(QSystemTrayIcon):
 
         menu = QMenu()
 
-        toggle_act = menu.addAction("▶  Toggle Listen")
-        toggle_act.triggered.connect(
+        # Read-only state line; its text (and the Toggle label) are set by _update_icon.
+        self._status_act = menu.addAction("")
+        self._status_act.setEnabled(False)
+        menu.addSeparator()
+
+        self._toggle_act = menu.addAction("Start Dictation")
+        self._toggle_act.triggered.connect(
             lambda: asyncio.ensure_future(on_toggle()).add_done_callback(log_failure)
         )
 
-        enroll_act = menu.addAction("🎤  Enroll Voice")
+        enroll_act = menu.addAction(themed_icon("audio-input-microphone-symbolic"), "Enroll Voice…")
         enroll_act.triggered.connect(on_enroll)
 
-        settings_act = menu.addAction("⚙  Settings")
+        settings_act = menu.addAction(themed_icon("preferences-system-symbolic"), "Settings…")
         settings_act.triggered.connect(on_settings)
 
-        log_act = menu.addAction("📄  Open Log")
+        log_act = menu.addAction(themed_icon("text-x-generic-symbolic"), "Open Log")
         log_act.triggered.connect(
             lambda: subprocess.run(["xdg-open", str(log_path)], check=False)
         )
 
         if get_last_text is not None:
-            copy_act = menu.addAction("📋  Copy Last Transcript")
+            copy_act = menu.addAction(themed_icon("edit-copy-symbolic"), "Copy Last Transcript")
             copy_act.triggered.connect(
                 lambda: QApplication.clipboard().setText(get_last_text())  # type: ignore[union-attr]
             )
@@ -166,10 +188,10 @@ class TrayIcon(QSystemTrayIcon):
         menu.addSeparator()
 
         if on_restart is not None:
-            restart_act = menu.addAction("🔄  Restart")
+            restart_act = menu.addAction(themed_icon("view-refresh-symbolic"), "Restart")
             restart_act.triggered.connect(on_restart)
 
-        quit_act = menu.addAction("✕  Quit")
+        quit_act = menu.addAction(themed_icon("application-exit-symbolic"), "Quit")
         quit_act.triggered.connect(on_quit)
 
         self.setContextMenu(menu)

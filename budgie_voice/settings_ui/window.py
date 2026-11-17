@@ -1,5 +1,8 @@
 """SettingsWindow — PyQt6 QDialog for Budgie configuration.
 
+Sidebar + stacked pages (Overview, Activation, Audio & Inference, Speaker Verification,
+Post-processing, Appearance). Opens on Overview, a read-only view of the running app.
+
 Saves to ``~/.config/budgie-voice/config.yaml`` and issues a DBus ``Reload()``
 so the running service picks up changes without restart.
 
@@ -13,28 +16,35 @@ from pathlib import Path
 
 import sounddevice as sd
 import yaml
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QKeyEvent, QKeySequence
 from PyQt6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QGroupBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QPushButton,
     QRadioButton,
     QScrollArea,
     QSlider,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from budgie_voice.inference.backends.registry import available_backends, models_for
 from budgie_voice.config.settings import Settings
+from budgie_voice.inference.backends.registry import available_backends, models_for
+from budgie_voice.settings_ui.overview import OverviewPage
+from budgie_voice.ui.status import RuntimeStatus
+from budgie_voice.ui.theme import sync_theme
+from budgie_voice.ui.widgets import SPACING, heading, muted, page, section
 
 _LOG = logging.getLogger(__name__)
 _CONFIG_PATH = Path.home() / ".config" / "budgie-voice" / "config.yaml"
@@ -75,6 +85,26 @@ class _HotkeyEdit(QLineEdit):
             self.setText("+".join(parts))
 
 
+class _Pages(QStackedWidget):
+    """Stack that never asks the scroll area for more width than it has.
+
+    QScrollArea sizes its widget from sizeHint(), and a word-wrapped QLabel reports the width of
+    its whole text there, which pushed every page past the window's right edge.
+    """
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        return QSize(0, super().sizeHint().height())
+
+
+def _form() -> tuple[QWidget, QFormLayout]:
+    """A borderless form block: pages get their margins from page(), not from the form."""
+    box = QWidget()
+    fl = QFormLayout(box)
+    fl.setContentsMargins(0, 0, 0, 0)
+    fl.setVerticalSpacing(SPACING)
+    return box, fl
+
+
 # ---------------------------------------------------------------------------
 # Settings window
 # ---------------------------------------------------------------------------
@@ -85,50 +115,102 @@ class SettingsWindow(QDialog):
     Args:
         settings: Current application settings (read-only source).
         parent: Optional Qt parent widget.
+        status: Runtime facts for the Overview page. Omitted when Settings runs
+            standalone: the Overview then reports what it cannot know as Unknown.
     """
 
-    def __init__(self, settings: Settings, parent: object = None) -> None:
+    def __init__(
+        self, settings: Settings, parent: object = None, status: RuntimeStatus | None = None
+    ) -> None:
         super().__init__(parent)  # type: ignore[call-arg]
         self._settings = settings
         self.setWindowTitle("Budgie — Settings")
-        self.setMinimumWidth(480)
+        self.setMinimumSize(660, 460)
+        self.resize(780, 540)
 
-        outer = QVBoxLayout(self)
+        # Pages that own widgets other code reads (combos, checkboxes) are built first;
+        # the Overview needs the mic list the Audio page populates.
+        activation = page(heading("Activation"), self._activation_form())
+        audio = page(
+            heading("Audio & Inference"),
+            section("Audio"), self._audio_form(),
+            section("Inference"), self._inference_form(),
+        )
+        speaker = page(heading("Speaker Verification"), self._speaker_form())
+        postproc = page(heading("Post-processing"), self._postproc_form())
+        appearance = page(
+            heading("Appearance"),
+            self._theme_form(),
+            section("Recording overlay"), self._indicator_form(),
+        )
+        self._overview = OverviewPage(settings, status or RuntimeStatus(), self._mic_label)
+
+        pages = [
+            ("Overview", self._overview), ("Activation", activation), ("Audio & Inference", audio),
+            ("Speaker Verification", speaker), ("Post-processing", postproc), ("Appearance", appearance),
+        ]
+        self._stack = _Pages()
+        self._nav = QListWidget()
+        self._nav.setFixedWidth(180)
+        self._nav.setFrameShape(QFrame.Shape.NoFrame)
+        self._nav.setAccessibleName("Settings sections")
+        # Row padding only, scoped to this one widget. Colours come from the palette, so the
+        # selection keeps the desktop accent and follows light/dark.
+        self._nav.setStyleSheet(
+            "QListWidget { outline: 0; } QListWidget::item { padding: 7px 12px; }"
+            " QListWidget::item:selected { background: palette(highlight); color: palette(highlighted-text); }"
+        )
+        for name, widget in pages:
+            self._nav.addItem(name)
+            self._stack.addWidget(widget)
+        self._nav.currentRowChanged.connect(self._on_nav)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        container = QWidget()
-        form = QVBoxLayout(container)
-        form.setSpacing(12)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setWidget(self._stack)
 
-        form.addWidget(self._activation_group())
-        form.addWidget(self._inference_group())
-        form.addWidget(self._audio_group())
-        form.addWidget(self._speaker_group())
-        form.addWidget(self._postproc_group())
-        form.addWidget(self._indicator_group())
+        divider = QFrame()
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setFrameShadow(QFrame.Shadow.Sunken)
 
-        privacy = QLabel("🔒 Speech recognition runs locally. No audio is saved.")
-        privacy.setStyleSheet("color: gray; font-style: italic;")
-        form.addWidget(privacy)
+        body = QHBoxLayout()
+        body.setSpacing(0)
+        body.addWidget(self._nav)
+        body.addWidget(divider)
+        body.addWidget(scroll, stretch=1)
 
-        scroll.setWidget(container)
-        outer.addWidget(scroll)
-
+        privacy = muted("🔒 Speech recognition runs locally. No audio is saved.")
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
-        outer.addWidget(buttons)
+        footer = QHBoxLayout()
+        footer.setContentsMargins(SPACING, SPACING, SPACING, SPACING)
+        footer.addWidget(privacy, stretch=1)
+        footer.addWidget(buttons)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+        outer.addLayout(body, stretch=1)
+        outer.addLayout(footer)
+
+        self._nav.setCurrentRow(0)  # opens on Overview (and runs its first refresh)
+
+    def _on_nav(self, row: int) -> None:
+        self._stack.setCurrentIndex(row)
+        if row == 0:
+            self._overview.refresh()
 
     # ------------------------------------------------------------------
-    # Group builders
+    # Page builders
     # ------------------------------------------------------------------
 
-    def _activation_group(self) -> QGroupBox:
-        box = QGroupBox("Activation")
-        fl = QFormLayout(box)
+    def _activation_form(self) -> QWidget:
+        box, fl = _form()
 
         self._hotkey_edit = _HotkeyEdit(self._settings.activation.hotkey)
         self._hotkey_edit.setPlaceholderText("Click here, then press your hotkey…")
@@ -149,9 +231,8 @@ class SettingsWindow(QDialog):
         if keep in models:
             self._model_combo.setCurrentText(keep)
 
-    def _inference_group(self) -> QGroupBox:
-        box = QGroupBox("Inference")
-        fl = QFormLayout(box)
+    def _inference_form(self) -> QWidget:
+        box, fl = _form()
 
         self._backend_combo = QComboBox()
         self._backend_combo.addItems(available_backends())
@@ -177,15 +258,18 @@ class SettingsWindow(QDialog):
         fl.addRow("", self._conf_label)
         return box
 
-    def _audio_group(self) -> QGroupBox:
-        box = QGroupBox("Audio")
-        fl = QFormLayout(box)
+    def _audio_form(self) -> QWidget:
+        box, fl = _form()
 
         self._mic_combo = QComboBox()
+        # Device names can be very long; the combo shrinks to the window instead of widening it.
+        self._mic_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self._mic_combo.setMinimumContentsLength(16)
         self._mic_device_values: list[str | None] = []
         refresh_btn = QPushButton("↻")
         refresh_btn.setFixedWidth(32)
         refresh_btn.setToolTip("Refresh device list")
+        refresh_btn.setAccessibleName("Refresh device list")
         refresh_btn.clicked.connect(self._populate_mic_devices)
 
         mic_row = QHBoxLayout()
@@ -193,12 +277,20 @@ class SettingsWindow(QDialog):
         mic_row.addWidget(refresh_btn)
         fl.addRow("Microphone:", mic_row)
 
-        self._denoise_chk = QCheckBox("Reduce background noise  (can clip speech; re-enroll after changing)")
+        # A checkbox can't wrap, so the caveat sits under it: one long label forced the whole
+        # settings stack wider than the window.
+        self._denoise_chk = QCheckBox("Reduce background noise")
         self._denoise_chk.setChecked(self._settings.audio.denoise)
         fl.addRow(self._denoise_chk)
+        fl.addRow("", muted("Can clip speech. Re-enroll your voice after changing this."))
 
         self._populate_mic_devices()
         return box
+
+    def _mic_label(self, device: str) -> str | None:
+        """Display name of *device* if the system lists it right now (the Overview's mic check)."""
+        i = self._mic_combo.findData(device)
+        return self._mic_combo.itemText(i) if i >= 0 else None
 
     def _populate_mic_devices(self) -> None:
         # On first call combo is empty — use saved setting as target.
@@ -276,12 +368,11 @@ class SettingsWindow(QDialog):
         restored = self._mic_combo.findData(target)
         self._mic_combo.setCurrentIndex(max(0, restored))
 
-    def _speaker_group(self) -> QGroupBox:
+    def _speaker_form(self) -> QWidget:
         from budgie_voice.speaker.enroller import EnrollmentWizard  # noqa: PLC0415
         from budgie_voice.speaker.verifier import SpeakerVerifier  # noqa: PLC0415
 
-        box = QGroupBox("Speaker Verification")
-        fl = QFormLayout(box)
+        box, fl = _form()
 
         self._speaker_chk = QCheckBox("Enable speaker verification")
         self._speaker_chk.setChecked(self._settings.speaker.enabled)
@@ -297,8 +388,6 @@ class SettingsWindow(QDialog):
         fl.addRow("Verification threshold:", self._speaker_thresh_slider)
         fl.addRow("", self._speaker_thresh_label)
 
-        from PyQt6.QtWidgets import QPushButton  # noqa: PLC0415  # already imported at top
-
         enroll_btn = QPushButton("🎤  Enroll Now")
         vp = Path(self._settings.speaker.voiceprint_path).expanduser()
         enroll_btn.clicked.connect(
@@ -307,9 +396,8 @@ class SettingsWindow(QDialog):
         fl.addRow(enroll_btn)
         return box
 
-    def _postproc_group(self) -> QGroupBox:
-        box = QGroupBox("Post-Processing")
-        fl = QFormLayout(box)
+    def _postproc_form(self) -> QWidget:
+        box, fl = _form()
         pp = self._settings.postprocessing
 
         self._num_chk = QCheckBox("Normalize numbers  (twenty two → 22)")
@@ -325,19 +413,28 @@ class SettingsWindow(QDialog):
             fl.addRow(chk)
         return box
 
-    # ------------------------------------------------------------------
-    # Save
-    # ------------------------------------------------------------------
+    def _theme_form(self) -> QWidget:
+        box, fl = _form()
+        self._theme_combo = QComboBox()
+        for label, value in (("System", "system"), ("Light", "light"), ("Dark", "dark")):
+            self._theme_combo.addItem(label, value)
+        self._theme_combo.setCurrentIndex(max(0, self._theme_combo.findData(self._settings.ui.theme)))
+        fl.addRow("Theme:", self._theme_combo)
+        fl.addRow("", muted("System follows your desktop's light or dark setting."))
+        return box
 
-    def _indicator_group(self) -> QGroupBox:
-        box = QGroupBox("Recording Overlay")
-        fl = QFormLayout(box)
+    def _indicator_form(self) -> QWidget:
+        box, fl = _form()
 
         self._visualizer_combo = QComboBox()
         self._visualizer_combo.addItems(["waveform", "blob"])
         self._visualizer_combo.setCurrentText(self._settings.indicator.visualizer)
         fl.addRow("Visualizer:", self._visualizer_combo)
         return box
+
+    # ------------------------------------------------------------------
+    # Save
+    # ------------------------------------------------------------------
 
     def _mic_devices(self) -> list[str]:
         """Selected mic first; fallbacks already in the config are kept behind it."""
@@ -379,16 +476,24 @@ class SettingsWindow(QDialog):
                 "language_cleanup": self._lang_chk.isChecked(),
             },
             "indicator": {"visualizer": self._visualizer_combo.currentText()},
+            "ui": {"theme": self._theme_combo.currentData()},
         }
 
-        for section, values in cfg.items():
-            base.setdefault(section, {}).update(values)
+        for section_name, values in cfg.items():
+            current = base.get(section_name)
+            if not isinstance(current, dict):  # missing, or left empty (None) in the YAML
+                current = base[section_name] = {}
+            current.update(values)
         base["audio"].pop("device", None)  # superseded by audio.devices
 
         _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with _CONFIG_PATH.open("w", encoding="utf-8") as fh:
             yaml.dump(base, fh, default_flow_style=False, allow_unicode=True)
         _LOG.info("Settings saved to %s", _CONFIG_PATH)
+
+        # Live, no restart: Settings runs inside the app, so the theme is applied right here. The
+        # Reload below sees the mode already in effect and does nothing more.
+        sync_theme(QApplication.instance(), cfg["ui"]["theme"])
 
         try:
             import dbus  # noqa: PLC0415

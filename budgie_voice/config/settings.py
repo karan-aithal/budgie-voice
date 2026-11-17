@@ -230,6 +230,14 @@ class IndicatorSettings:
 
 
 @dataclass
+class UiSettings:
+    """Look of the Settings and enrollment windows."""
+
+    # "system" follows the desktop's light/dark preference live; "light"/"dark" pin it.
+    theme: Literal["system", "light", "dark"] = "system"
+
+
+@dataclass
 class LoggingSettings:
     """Logging configuration."""
 
@@ -259,6 +267,7 @@ class Settings:
     injection: InjectionSettings = field(default_factory=InjectionSettings)
     llm: LlmSettings = field(default_factory=LlmSettings)
     indicator: IndicatorSettings = field(default_factory=IndicatorSettings)
+    ui: UiSettings = field(default_factory=UiSettings)
     logging: LoggingSettings = field(default_factory=LoggingSettings)
     notifications: NotificationSettings = field(default_factory=NotificationSettings)
 
@@ -270,8 +279,13 @@ def _merge(instance: object, data: dict) -> None:
             _LOG.warning("Unknown config key ignored: %s", key)
             continue
         attr = getattr(instance, key)
-        if hasattr(attr, "__dataclass_fields__") and isinstance(val, dict):
-            _merge(attr, val)
+        if hasattr(attr, "__dataclass_fields__"):
+            # A whole section. `ui:` left empty is None in YAML: that means "defaults", and must
+            # not replace the section object (every later `settings.ui.theme` would crash).
+            if isinstance(val, dict):
+                _merge(attr, val)
+            elif val is not None:
+                _LOG.warning("Config section %r must be a mapping — ignored, using defaults", key)
         else:
             setattr(instance, key, val)
 

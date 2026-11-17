@@ -43,6 +43,11 @@ class SpeakerVerifier:
         self._model: object | None = None
         self._voiceprint: np.ndarray | None = None
 
+    @property
+    def ready(self) -> bool:
+        """True once the model and a voiceprint are both loaded (read-only, for status display)."""
+        return self._model is not None and self._voiceprint is not None
+
     def set_threshold(self, threshold: float) -> None:
         """Cosine-similarity cutoff used from the next verification on."""
         self._threshold = threshold

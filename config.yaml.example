@@ -95,6 +95,9 @@ injection:
 indicator:
   visualizer: "waveform"  # "waveform" | "blob" (double-click the overlay to toggle live)
 
+ui:
+  theme: "system"         # "system" (follow the desktop, live) | "light" | "dark"
+
 logging:
   level: "INFO"           # DEBUG | INFO | WARNING | ERROR
 

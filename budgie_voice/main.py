@@ -31,6 +31,7 @@ from budgie_voice.orchestrator.hotkey import HotkeyManager
 from budgie_voice.orchestrator.session import SessionState
 from budgie_voice.postprocessing.pipeline import PostProcessingPipeline
 from budgie_voice.speaker.verifier import SpeakerVerifier
+from budgie_voice.ui.status import RuntimeStatus
 from budgie_voice.utils.aio import dispatch
 from budgie_voice.utils.exceptions import BudgieInjectionError
 from budgie_voice.utils.logging_setup import setup_logging
@@ -105,6 +106,10 @@ async def main_async() -> bool:
         except Exception as exc:
             _LOG.warning("SpeakerVerifier: %s", exc)
 
+    # What Settings → Overview reads. Plain Python (no Qt), so headless runs build it too.
+    status = RuntimeStatus(verifier)
+    status.set_asr(backend, backend_name, model)
+
     # ------------------------------------------------------------------
     # Callback chains (populated after tray is created)
     # ------------------------------------------------------------------
@@ -137,6 +142,8 @@ async def main_async() -> bool:
     # DictationService
     # ------------------------------------------------------------------
     injector_holder = {"injector": injector}
+    # Filled by the tray block when Qt is up; a headless run has nothing to theme.
+    ui_hooks: dict[str, Callable[[str], None]] = {}
     dict_svc = DictationService(
         adapter=adapter, client=client, pipeline=pipeline,
         injector=injector, verifier=verifier, settings=settings,
@@ -168,6 +175,9 @@ async def main_async() -> bool:
         new = load_settings()
         problems: list[str] = []
 
+        if (sync_theme_hook := ui_hooks.get("theme")) is not None:
+            sync_theme_hook(new.ui.theme)  # no-op when Settings → Save already applied it
+
         backend_name, model, problem = resolve(new.inference.backend, new.inference.model)
         if problem:
             problems.append(problem)
@@ -175,12 +185,17 @@ async def main_async() -> bool:
         key = _backend_key(new.inference, backend_name, model)
         if key != active_key:
             _LOG.info("Inference settings changed (%s) — loading new backend", model)
+            status.set_asr_loading(True, f"{backend_name} / {model}")
             try:
-                server.swap_backend(await _load_backend(new, backend_name, model))
+                new_backend = await _load_backend(new, backend_name, model)
+                server.swap_backend(new_backend)
                 active_key = key
+                status.set_asr(new_backend, backend_name, model)
             except Exception as exc:  # noqa: BLE001 — old backend keeps serving
                 _LOG.exception("Backend reload failed")
                 problems.append(f"Could not load {model} ({type(exc).__name__}) — keeping the previous model")
+            finally:
+                status.set_asr_loading(False)
 
         if (new.injection.backend, new.injection.delay_ms) != (old.injection.backend, old.injection.delay_ms):
             new_injector = _make_injector(new)
@@ -212,6 +227,9 @@ async def main_async() -> bool:
 
     dbus_svc = BudgieDBusService(dict_svc, loop, on_reload=lambda: dispatch(_reload(), loop))
     _state_cbs.append(lambda s: dbus_svc.emit_state_changed(str(s)))
+    # Activity history: the state change plus how many characters were typed, never any text.
+    # (on_session_state swallows its own errors: nothing here may stop the tray/recorder callbacks.)
+    _state_cbs.append(lambda s: status.on_session_state(str(s), dict_svc.typed_chars))
     dbus_svc.start()
 
     await dict_svc.start()
@@ -238,12 +256,29 @@ async def main_async() -> bool:
         from budgie_voice.indicator.tray import TrayIcon, TrayState  # noqa: PLC0415
         from budgie_voice.settings_ui.window import SettingsWindow  # noqa: PLC0415
         from budgie_voice.speaker.enroller import EnrollmentWizard  # noqa: PLC0415
+        from budgie_voice.ui.theme import sync_theme  # noqa: PLC0415
+        from PyQt6.QtWidgets import QApplication  # noqa: PLC0415
+
+        ui_hooks["theme"] = lambda mode: sync_theme(QApplication.instance(), mode)
+        ui_hooks["theme"](settings.ui.theme)
+
+        # One window of each kind, kept alive: a parentless Qt widget is destroyed as soon as
+        # Python drops its last reference, so `Window(...).show()` alone can vanish at the next GC.
+        windows: dict[str, object] = {}
+
+        def _open_once(key: str, make: Callable[[], object]) -> None:
+            win = windows.get(key)
+            if win is None or not win.isVisible():  # type: ignore[attr-defined]
+                win = windows[key] = make()
+                win.show()  # type: ignore[attr-defined]
+            win.raise_()  # type: ignore[attr-defined]
+            win.activateWindow()  # type: ignore[attr-defined]
 
         log_path = Path.home() / ".local" / "share" / "budgie-voice" / "logs" / "budgie-voice.log"
         tray = TrayIcon(
             on_toggle=lambda: dict_svc.toggle("tray"),
-            on_enroll=lambda: EnrollmentWizard(verifier).show(),
-            on_settings=lambda: SettingsWindow(dict_svc.settings).show(),
+            on_enroll=lambda: _open_once("enroll", lambda: EnrollmentWizard(verifier)),
+            on_settings=lambda: _open_once("settings", lambda: SettingsWindow(dict_svc.settings, status=status)),
             on_quit=stop_event.set,
             on_restart=_request_restart,
             get_last_text=lambda: dict_svc.last_transcript,
