@@ -14,15 +14,22 @@ from pathlib import Path
 from typing import Callable
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QColor, QIcon
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from budgie_voice.ui.theme import themed_icon
+from budgie_voice.ui.icons import icon as lucide
 from budgie_voice.utils.aio import log_failure
 
 _LOG = logging.getLogger(__name__)
 
 _ICONS_DIR = Path(__file__).parent / "icons"
+# GNOME renders this menu in the shell, in its own dark colours, so menu glyphs use a fixed mid-grey
+# that reads on both dark and light menus instead of following the app palette.
+_GLYPH = QColor("#8e8e93")
+
+
+def _glyph(name: str) -> QIcon:
+    return lucide(name, _GLYPH, size=16)
 
 
 class TrayState(StrEnum):
@@ -136,13 +143,13 @@ class TrayIcon(QSystemTrayIcon):
         self._status_act.setText(tooltip)
         if state in _STOP_STATES:
             self._toggle_act.setText("Stop Dictation")
-            self._toggle_act.setIcon(themed_icon("media-playback-stop-symbolic"))
+            self._toggle_act.setIcon(_glyph("square"))
         elif state in _BUSY_STATES:
             self._toggle_act.setText("Finishing…")
-            self._toggle_act.setIcon(themed_icon("content-loading-symbolic"))
+            self._toggle_act.setIcon(_glyph("loader-circle"))
         else:
             self._toggle_act.setText("Start Dictation")
-            self._toggle_act.setIcon(themed_icon("media-playback-start-symbolic"))
+            self._toggle_act.setIcon(_glyph("play"))
 
     def _build_menu(
         self,
@@ -168,19 +175,19 @@ class TrayIcon(QSystemTrayIcon):
             lambda: asyncio.ensure_future(on_toggle()).add_done_callback(log_failure)
         )
 
-        enroll_act = menu.addAction(themed_icon("audio-input-microphone-symbolic"), "Enroll Voice…")
+        enroll_act = menu.addAction(_glyph("user-round-plus"), "Enroll Voice…")
         enroll_act.triggered.connect(on_enroll)
 
-        settings_act = menu.addAction(themed_icon("preferences-system-symbolic"), "Settings…")
+        settings_act = menu.addAction(_glyph("sliders-horizontal"), "Settings…")
         settings_act.triggered.connect(on_settings)
 
-        log_act = menu.addAction(themed_icon("text-x-generic-symbolic"), "Open Log")
+        log_act = menu.addAction(_glyph("file-text"), "Open Log")
         log_act.triggered.connect(
             lambda: subprocess.run(["xdg-open", str(log_path)], check=False)
         )
 
         if get_last_text is not None:
-            copy_act = menu.addAction(themed_icon("edit-copy-symbolic"), "Copy Last Transcript")
+            copy_act = menu.addAction(_glyph("copy"), "Copy Last Transcript")
             copy_act.triggered.connect(
                 lambda: QApplication.clipboard().setText(get_last_text())  # type: ignore[union-attr]
             )
@@ -188,10 +195,10 @@ class TrayIcon(QSystemTrayIcon):
         menu.addSeparator()
 
         if on_restart is not None:
-            restart_act = menu.addAction(themed_icon("view-refresh-symbolic"), "Restart")
+            restart_act = menu.addAction(_glyph("rotate-cw"), "Restart")
             restart_act.triggered.connect(on_restart)
 
-        quit_act = menu.addAction(themed_icon("application-exit-symbolic"), "Quit")
+        quit_act = menu.addAction(_glyph("log-out"), "Quit")
         quit_act.triggered.connect(on_quit)
 
         self.setContextMenu(menu)

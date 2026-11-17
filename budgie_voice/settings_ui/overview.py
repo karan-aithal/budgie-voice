@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import QHeaderView, QTreeWidget, QTreeWidgetItem, QVBoxLayo
 
 from budgie_voice.config.settings import Settings
 from budgie_voice.ui.status import RuntimeStatus, Status, probe_llm
-from budgie_voice.ui.widgets import MARGIN, SPACING, StatusRow, heading, muted, section
+from budgie_voice.ui.widgets import MARGIN, SPACING, StatusRow, card, heading, muted, section
 
 _LOG = logging.getLogger(__name__)
 
@@ -52,14 +52,14 @@ class OverviewPage(QWidget):
         self._activity.header().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         self._activity.header().setStretchLastSection(True)
         self._activity.setAccessibleName("Recent dictations")
+        self._activity.viewport().setAutoFillBackground(False)  # let the rounded frame show through
         self._empty = muted("No dictations yet this session.")
 
         col = QVBoxLayout(self)
         col.setContentsMargins(MARGIN, MARGIN, MARGIN, MARGIN)
         col.setSpacing(SPACING)
         col.addWidget(heading("Overview"))
-        for row in (self._mic, self._asr, self._llm, self._speaker):
-            col.addWidget(row)
+        col.addWidget(card(self._mic, self._asr, self._llm, self._speaker))
         col.addSpacing(SPACING)
         col.addWidget(section("Recent dictations"))
         col.addWidget(muted("Metadata only. Transcripts are never shown or stored here."))

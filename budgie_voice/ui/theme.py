@@ -35,10 +35,10 @@ _SCHEME = {
 
 # Status colours, tuned per scheme for contrast against the window background.
 # Disabled/Unknown are neutral and use the palette's disabled text colour.
-_STATUS_LIGHT = {Status.READY: "#186f33", Status.CONNECTING: "#8a5a00",
-                 Status.UNAVAILABLE: "#8a5a00", Status.ERROR: "#c01c28"}
-_STATUS_DARK = {Status.READY: "#57c27a", Status.CONNECTING: "#e5a50a",
-                Status.UNAVAILABLE: "#e5a50a", Status.ERROR: "#ff7b63"}
+_STATUS_LIGHT = {Status.READY: "#186f33", Status.CONNECTING: "#1a5fb4",
+                 Status.UNAVAILABLE: "#b34a00", Status.ERROR: "#c01c28"}
+_STATUS_DARK = {Status.READY: "#57c27a", Status.CONNECTING: "#78aeed",
+                Status.UNAVAILABLE: "#ff9a5c", Status.ERROR: "#ff7b63"}
 
 
 def themed_icon(name: str) -> QIcon:

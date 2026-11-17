@@ -26,7 +26,8 @@ from pathlib import Path
 
 import numpy as np
 import sounddevice as sd
-from PyQt6.QtGui import QPalette
+from PyQt6.QtCore import QEvent, QTimer
+from PyQt6.QtGui import QFont, QPalette
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -43,7 +44,9 @@ from PyQt6.QtWidgets import (
 from budgie_voice.speaker._workers import _RECORD_SECONDS, EnrollWorker, RecordWorker
 from budgie_voice.speaker.verifier import SpeakerVerifier
 from budgie_voice.ui.status import Status
-from budgie_voice.ui.theme import apply_theme, themed_icon
+from budgie_voice.ui.icons import pixmap
+from budgie_voice.ui.style import apply_scope, set_icon, ui_font
+from budgie_voice.ui.theme import apply_theme
 from budgie_voice.ui.widgets import SPACING, StatusRow, muted
 
 _LOG = logging.getLogger(__name__)
@@ -57,26 +60,43 @@ _ROW_NAME_WIDTH = 80  # status rows on the narrow wizard pages
 
 
 class _Steps(QWidget):
-    """Step list for the wizard's side: the current step is bold, later steps are muted."""
+    """Step list for the wizard's side: done steps are checked, the current step is medium weight,
+    later steps are muted."""
 
     def __init__(self, names: tuple[str, ...]) -> None:
         super().__init__()
         self._names = names
-        self._labels = [QLabel(f"{i + 1}.  {name}") for i, name in enumerate(names)]
+        self._index = 0
+        self._labels = [QLabel(name) for name in names]
+        self._glyphs = [QLabel() for _ in names]
         col = QVBoxLayout(self)
         col.setContentsMargins(SPACING, 2 * SPACING, SPACING, SPACING)
         col.setSpacing(SPACING)
-        for label in self._labels:
-            col.addWidget(label)
+        for glyph, label in zip(self._glyphs, self._labels):
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            row.addWidget(glyph)
+            row.addWidget(label, stretch=1)
+            col.addLayout(row)
         col.addStretch()
         self.set_current(0)
 
+    def changeEvent(self, event) -> None:  # noqa: N802
+        if event.type() == QEvent.Type.PaletteChange:
+            QTimer.singleShot(0, lambda: self.set_current(self._index))  # glyph colours follow the theme
+        super().changeEvent(event)
+
     def set_current(self, index: int) -> None:
-        for i, label in enumerate(self._labels):
-            font = label.font()
-            font.setWeight(font.Weight.DemiBold if i == index else font.Weight.Normal)
-            label.setFont(font)
-            label.setForegroundRole(QPalette.ColorRole.WindowText if i <= index else QPalette.ColorRole.PlaceholderText)
+        self._index = index
+        pal = QApplication.palette()
+        for i, (glyph, label) in enumerate(zip(self._glyphs, self._labels)):
+            label.setFont(ui_font(13, QFont.Weight.Medium if i == index else QFont.Weight.Normal))
+            reached = i <= index
+            label.setForegroundRole(QPalette.ColorRole.WindowText if reached else QPalette.ColorRole.PlaceholderText)
+            name = "circle-check" if i < index else "circle-dot" if i == index else "circle"
+            colour = pal.color(QPalette.ColorRole.Highlight if reached else QPalette.ColorRole.PlaceholderText)
+            glyph.setPixmap(pixmap(name, colour, 16))
+            glyph.setAccessibleName("")  # the label carries the step's accessible name
             label.setAccessibleName(
                 f"Step {i + 1} of {len(self._names)}: {self._names[i]}" + (", current" if i == index else "")
             )
@@ -96,7 +116,7 @@ class _WelcomePage(QWizardPage):
         self._device_ids: list[int] = []
         self._combo = QComboBox()
         self._refresh_btn = QPushButton("Refresh")
-        self._refresh_btn.setIcon(themed_icon("view-refresh-symbolic"))
+        set_icon(self._refresh_btn, "refresh-cw")
         self._refresh_btn.setToolTip("Look for microphones again")
         self._refresh_btn.clicked.connect(self._populate_devices)
 
@@ -219,9 +239,10 @@ class _RecordingPage(QWizardPage):
         self._busy.setRange(0, 0)
         self._busy.setTextVisible(False)
         self._busy.setMaximumHeight(8)
+        self._busy.setProperty("slim", True)  # keeps its 8 px height in the stylesheet
         self._busy.hide()
         self._record_btn = QPushButton("Record clip")
-        self._record_btn.setIcon(themed_icon("audio-input-microphone-symbolic"))
+        set_icon(self._record_btn, "mic")
         self._record_btn.clicked.connect(self._start_record)
         self._level = StatusRow("Last clip", name_width=_ROW_NAME_WIDTH)
         self._level.hide()
@@ -344,7 +365,7 @@ class _ConfirmationPage(QWizardPage):
             "Result", Status.UNKNOWN, "not tested yet", word="Waiting", name_width=_ROW_NAME_WIDTH
         )
         self._test_btn = QPushButton("Test now")
-        self._test_btn.setIcon(themed_icon("audio-input-microphone-symbolic"))
+        set_icon(self._test_btn, "mic")
         self._test_btn.clicked.connect(self._run_test)
         self._worker: RecordWorker | None = None
 
@@ -404,6 +425,18 @@ class EnrollmentWizard(QWizard):
         self._steps = _Steps(_STEPS)
         self.setSideWidget(self._steps)
         self.currentIdChanged.connect(self._steps.set_current)
+
+        # Icons and emphasis only: the wizard's own button texts, order and actions stay.
+        for which, icon_name in (
+            (QWizard.WizardButton.BackButton, "chevron-left"), (QWizard.WizardButton.FinishButton, "check"),
+            (QWizard.WizardButton.CancelButton, "x"),
+        ):
+            set_icon(self.button(which), icon_name)
+        self.setButtonText(QWizard.WizardButton.BackButton, "&Back")   # the icon replaces Qt's "< "
+        self.setButtonText(QWizard.WizardButton.NextButton, "&Next")   # ... and "Next >"
+        for which in (QWizard.WizardButton.NextButton, QWizard.WizardButton.FinishButton):
+            self.button(which).setProperty("primary", True)
+        apply_scope(self)  # also re-renders the icons above for the primary buttons
 
 
 # ---------------------------------------------------------------------------

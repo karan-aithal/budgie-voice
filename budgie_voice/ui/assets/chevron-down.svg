@@ -1,0 +1,3 @@
+<!-- Lucide "chevron-down" (ISC licence, see budgie_voice/ui/icons.py). QSS can only load a file path,
+     so this one icon is static, in a mid-grey that reads on both the light and the dark window. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>

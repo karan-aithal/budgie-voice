@@ -17,10 +17,9 @@ from pathlib import Path
 import sounddevice as sd
 import yaml
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QKeyEvent, QKeySequence
+from PyQt6.QtGui import QColor, QKeyEvent, QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -30,6 +29,7 @@ from PyQt6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QPushButton,
     QRadioButton,
     QScrollArea,
@@ -43,8 +43,10 @@ from budgie_voice.config.settings import Settings
 from budgie_voice.inference.backends.registry import available_backends, models_for
 from budgie_voice.settings_ui.overview import OverviewPage
 from budgie_voice.ui.status import RuntimeStatus
+from budgie_voice.ui.icons import pixmap
+from budgie_voice.ui.style import apply_scope, set_icon
 from budgie_voice.ui.theme import sync_theme
-from budgie_voice.ui.widgets import SPACING, heading, muted, page, section
+from budgie_voice.ui.widgets import SPACING, Switch, heading, muted, page, section
 
 _LOG = logging.getLogger(__name__)
 _CONFIG_PATH = Path.home() / ".config" / "budgie-voice" / "config.yaml"
@@ -146,22 +148,22 @@ class SettingsWindow(QDialog):
         self._overview = OverviewPage(settings, status or RuntimeStatus(), self._mic_label)
 
         pages = [
-            ("Overview", self._overview), ("Activation", activation), ("Audio & Inference", audio),
-            ("Speaker Verification", speaker), ("Post-processing", postproc), ("Appearance", appearance),
+            ("Overview", "layout-dashboard", self._overview), ("Activation", "keyboard", activation),
+            ("Audio & Inference", "audio-lines", audio), ("Speaker Verification", "shield-check", speaker),
+            ("Post-processing", "sparkles", postproc), ("Appearance", "sun-moon", appearance),
         ]
         self._stack = _Pages()
         self._nav = QListWidget()
-        self._nav.setFixedWidth(180)
+        self._nav.setObjectName("nav")  # styled by ui.style
+        self._nav.setFixedWidth(232)
+        self._nav.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._nav.setIconSize(QSize(24, 18))  # 18 px glyph on a canvas with a 6 px gap to the label
         self._nav.setFrameShape(QFrame.Shape.NoFrame)
         self._nav.setAccessibleName("Settings sections")
-        # Row padding only, scoped to this one widget. Colours come from the palette, so the
-        # selection keeps the desktop accent and follows light/dark.
-        self._nav.setStyleSheet(
-            "QListWidget { outline: 0; } QListWidget::item { padding: 7px 12px; }"
-            " QListWidget::item:selected { background: palette(highlight); color: palette(highlighted-text); }"
-        )
-        for name, widget in pages:
-            self._nav.addItem(name)
+        for name, icon_name, widget in pages:
+            item = QListWidgetItem(name)
+            set_icon(item, icon_name)
+            self._nav.addItem(item)
             self._stack.addWidget(widget)
         self._nav.currentRowChanged.connect(self._on_nav)
 
@@ -181,14 +183,22 @@ class SettingsWindow(QDialog):
         body.addWidget(divider)
         body.addWidget(scroll, stretch=1)
 
-        privacy = muted("🔒 Speech recognition runs locally. No audio is saved.")
+        lock = QLabel()
+        lock.setPixmap(pixmap("lock", QColor("#8e8e93"), 14))  # muted grey, reads on light and dark
+        privacy = muted("Speech recognition runs locally. No audio is saved.")
         buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
         )
+        save_btn = buttons.button(QDialogButtonBox.StandardButton.Save)
+        save_btn.setProperty("primary", True)
+        set_icon(save_btn, "check")
+        set_icon(buttons.button(QDialogButtonBox.StandardButton.Cancel), "x")
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
         footer = QHBoxLayout()
         footer.setContentsMargins(SPACING, SPACING, SPACING, SPACING)
+        footer.setSpacing(8)
+        footer.addWidget(lock, alignment=Qt.AlignmentFlag.AlignVCenter)
         footer.addWidget(privacy, stretch=1)
         footer.addWidget(buttons)
 
@@ -198,6 +208,7 @@ class SettingsWindow(QDialog):
         outer.addLayout(body, stretch=1)
         outer.addLayout(footer)
 
+        apply_scope(self)  # font, stylesheet, icon colours: this window only
         self._nav.setCurrentRow(0)  # opens on Overview (and runs its first refresh)
 
     def _on_nav(self, row: int) -> None:
@@ -266,20 +277,23 @@ class SettingsWindow(QDialog):
         self._mic_combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
         self._mic_combo.setMinimumContentsLength(16)
         self._mic_device_values: list[str | None] = []
-        refresh_btn = QPushButton("↻")
+        refresh_btn = QPushButton()
+        refresh_btn.setProperty("iconOnly", True)
+        set_icon(refresh_btn, "refresh-cw")
         refresh_btn.setFixedWidth(32)
         refresh_btn.setToolTip("Refresh device list")
         refresh_btn.setAccessibleName("Refresh device list")
         refresh_btn.clicked.connect(self._populate_mic_devices)
 
         mic_row = QHBoxLayout()
+        mic_row.setSpacing(8)
         mic_row.addWidget(self._mic_combo, stretch=1)
         mic_row.addWidget(refresh_btn)
         fl.addRow("Microphone:", mic_row)
 
         # A checkbox can't wrap, so the caveat sits under it: one long label forced the whole
         # settings stack wider than the window.
-        self._denoise_chk = QCheckBox("Reduce background noise")
+        self._denoise_chk = Switch("Reduce background noise")
         self._denoise_chk.setChecked(self._settings.audio.denoise)
         fl.addRow(self._denoise_chk)
         fl.addRow("", muted("Can clip speech. Re-enroll your voice after changing this."))
@@ -374,7 +388,7 @@ class SettingsWindow(QDialog):
 
         box, fl = _form()
 
-        self._speaker_chk = QCheckBox("Enable speaker verification")
+        self._speaker_chk = Switch("Enable speaker verification")
         self._speaker_chk.setChecked(self._settings.speaker.enabled)
         fl.addRow(self._speaker_chk)
 
@@ -388,7 +402,8 @@ class SettingsWindow(QDialog):
         fl.addRow("Verification threshold:", self._speaker_thresh_slider)
         fl.addRow("", self._speaker_thresh_label)
 
-        enroll_btn = QPushButton("🎤  Enroll Now")
+        enroll_btn = QPushButton("Enroll Now")
+        set_icon(enroll_btn, "user-round-plus")
         vp = Path(self._settings.speaker.voiceprint_path).expanduser()
         enroll_btn.clicked.connect(
             lambda: EnrollmentWizard(SpeakerVerifier(vp), parent=self).show()
@@ -400,13 +415,13 @@ class SettingsWindow(QDialog):
         box, fl = _form()
         pp = self._settings.postprocessing
 
-        self._num_chk = QCheckBox("Normalize numbers  (twenty two → 22)")
+        self._num_chk = Switch("Normalize numbers  (twenty two → 22)")
         self._num_chk.setChecked(pp.normalize_numbers)
-        self._punct_chk = QCheckBox("Punctuation commands  (period → .)")
+        self._punct_chk = Switch("Punctuation commands  (period → .)")
         self._punct_chk.setChecked(pp.punctuation_commands)
-        self._cap_chk = QCheckBox("Auto-capitalise")
+        self._cap_chk = Switch("Auto-capitalise")
         self._cap_chk.setChecked(pp.auto_capitalize)
-        self._lang_chk = QCheckBox("Language cleanup  (gonna → going to)")
+        self._lang_chk = Switch("Language cleanup  (gonna → going to)")
         self._lang_chk.setChecked(pp.language_cleanup)
 
         for chk in (self._num_chk, self._punct_chk, self._cap_chk, self._lang_chk):

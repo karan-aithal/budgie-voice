@@ -98,12 +98,12 @@ def test_menu_has_no_emoji_and_keeps_the_tested_words(qapp) -> None:
         assert any(word in t for t in texts), word
 
 
-def test_menu_works_when_the_icon_theme_has_nothing(qapp, monkeypatch) -> None:
-    monkeypatch.setattr(QIcon, "fromTheme", staticmethod(lambda *a: QIcon()))
+def test_menu_glyphs_are_bundled_not_themed(qapp, monkeypatch) -> None:
+    monkeypatch.setattr(QIcon, "fromTheme", staticmethod(lambda *a: QIcon()))  # an icon theme with nothing
     tray = _tray()
     tray.set_state(TrayState.RECORDING)
     acts = _actions(tray)
-    assert all(a.icon().isNull() for a in acts)                       # no glyphs, no errors
+    assert all(not a.icon().isNull() for a in acts[1:])               # every action has its Lucide glyph
     assert [a.text() for a in acts][1] == "Stop Dictation" and len(acts) == 8
     assert not tray.icon().isNull()                                    # the state icon is bundled SVG, not themed
 
@@ -146,7 +146,7 @@ def test_no_emoji_in_any_wizard_text(wizard) -> None:
 
 def test_step_indicator_follows_the_wizard(wizard) -> None:
     def current() -> list[int]:
-        return [i for i, lbl in enumerate(wizard._steps._labels) if int(lbl.font().weight()) >= 600]
+        return [i for i, lbl in enumerate(wizard._steps._labels) if int(lbl.font().weight()) >= 500]
 
     assert current() == [0]
     for page_id in (1, 2, 3):

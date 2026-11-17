@@ -1,56 +1,55 @@
-"""Shared Native Minimal building blocks: type scale and a status row.
+"""Shared building blocks: type scale, status row, card, switch.
 
-System font and palette only. Hierarchy comes from weight, size and the muted text colour,
-not from boxes or shadows.
+Ubuntu font (with fallbacks) and the palette only. Hierarchy comes from weight, size and the muted
+text colour. The look of buttons, inputs and frames is the scoped stylesheet in ``ui.style``.
 """
 from __future__ import annotations
 
-from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QPainter, QPalette
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QVBoxLayout, QWidget
+from PyQt6.QtCore import QRectF, QSize, Qt, QVariantAnimation
+from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPalette, QPen
+from PyQt6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from budgie_voice.ui.status import Status
+from budgie_voice.ui.style import mix, ui_font
 from budgie_voice.ui.theme import status_color
 
 SPACING = 12   # between controls
 MARGIN = 20    # page edge
-_DOT = 8
+_DOT = 10
+_Medium = QFont.Weight.Medium
 
 
 def section(text: str) -> QLabel:
-    """Sub-heading inside a page: same size as body text, semibold."""
+    """Sub-heading inside a page."""
     label = QLabel(text)
-    font = label.font()
-    font.setWeight(font.Weight.DemiBold)
-    label.setFont(font)
+    label.setFont(ui_font(15, _Medium))
     return label
 
 
 def heading(text: str) -> QLabel:
-    """Page title: system font, one step up, semibold. Not oversized."""
+    """Page title."""
     label = QLabel(text)
-    font = label.font()
-    font.setPointSizeF(font.pointSizeF() * 1.35)
-    font.setWeight(font.Weight.DemiBold)
-    label.setFont(font)
+    label.setFont(ui_font(22, _Medium))
     return label
 
 
 def muted(text: str) -> QLabel:
     """Secondary text: palette placeholder colour, so it adapts to light and dark."""
     label = QLabel(text)
+    label.setFont(ui_font(12))
     label.setWordWrap(True)
     label.setForegroundRole(QPalette.ColorRole.PlaceholderText)
     return label
 
 
 class _Dot(QWidget):
-    """Status dot, coloured at paint time so it follows theme changes."""
+    """Status dot, coloured at paint time so it follows theme changes. Its box is one text line
+    tall, so the circle sits on the first line's centre however long the value wraps."""
 
-    def __init__(self, status: Status) -> None:
+    def __init__(self, status: Status, line_height: int) -> None:
         super().__init__()
         self._status = status
-        self.setFixedSize(QSize(_DOT + 2, _DOT + 2))
+        self.setFixedSize(QSize(_DOT, max(line_height, _DOT)))
 
     def set_status(self, status: Status) -> None:
         self._status = status
@@ -61,7 +60,34 @@ class _Dot(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(status_color(self._status))
-        painter.drawEllipse(1, 1, _DOT, _DOT)
+        painter.drawEllipse(QRectF(0, (self.height() - _DOT) / 2, _DOT, _DOT))
+
+
+class _OneLine(QLabel):
+    """Never wraps: text that does not fit is cut with an ellipsis, and the full text is the tooltip.
+    ``text()`` still returns the whole string."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        super().setText(text)
+        self._sync_tooltip()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        self._sync_tooltip()
+
+    def _sync_tooltip(self) -> None:
+        cut = self.fontMetrics().horizontalAdvance(self.text()) > self.width()
+        self.setToolTip(self.text() if cut else "")
+
+    def paintEvent(self, event) -> None:  # noqa: N802, ARG002
+        painter = QPainter(self)
+        painter.setPen(self.palette().color(self.foregroundRole()))
+        shown = self.fontMetrics().elidedText(self.text(), Qt.TextElideMode.ElideRight, self.width())
+        painter.drawText(self.rect(), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, shown)
 
 
 class StatusRow(QWidget):
@@ -70,18 +96,18 @@ class StatusRow(QWidget):
 
     def __init__(
         self, name: str, status: Status = Status.UNKNOWN, detail: str = "", word: str | None = None,
-        name_width: int = 170,
+        name_width: int = 140,
     ) -> None:
         super().__init__()
-        self._dot = _Dot(status)
         self._name = QLabel(name)
+        self._name.setFont(ui_font(13, _Medium))
         self._name.setMinimumWidth(name_width)  # default fits the longest Overview name, so values line up
-        self._value = QLabel()
-        self._value.setWordWrap(True)
-        self._value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._value = _OneLine()
+        self._value.setFont(ui_font(13))
+        self._dot = _Dot(status, QFontMetrics(self._value.font()).height())
 
         row = QHBoxLayout(self)
-        row.setContentsMargins(0, 2, 0, 2)
+        row.setContentsMargins(0, 10, 0, 10)
         row.setSpacing(SPACING)
         row.addWidget(self._dot, alignment=Qt.AlignmentFlag.AlignTop)
         row.addWidget(self._name, alignment=Qt.AlignmentFlag.AlignTop)
@@ -93,6 +119,106 @@ class StatusRow(QWidget):
         self._dot.set_status(status)
         label = word or status.value
         self._value.setText(f"{label} — {detail}" if detail else label)
+
+
+def card(*rows: QWidget) -> QFrame:
+    """Rows in one rounded panel, with a hairline between them. Styled by ``QFrame#card`` in ui.style."""
+    frame = QFrame()
+    frame.setObjectName("card")
+    col = QVBoxLayout(frame)
+    col.setContentsMargins(16, 6, 16, 6)  # + the row's own 10 px: 16 px on all four sides
+    col.setSpacing(0)
+    for i, row in enumerate(rows):
+        if i:
+            sep = QFrame()
+            sep.setObjectName("sep")
+            sep.setFixedHeight(1)
+            col.addWidget(sep)
+        col.addWidget(row)
+    return frame
+
+
+class Switch(QCheckBox):
+    """A QCheckBox drawn as a toggle switch: same state, signals, keyboard and accessibility,
+    only the painting differs."""
+
+    _W, _H, _GAP, _PAD = 36, 20, 10, 2
+
+    def __init__(self, text: str = "") -> None:
+        super().__init__(text)
+        self._t = 1.0 if self.isChecked() else 0.0   # 0 = off, 1 = on; animated
+        self._ring = False                            # keyboard focus ring
+        self._anim = QVariantAnimation(self, duration=120)
+        self._anim.valueChanged.connect(self._step)
+        self.toggled.connect(self._on_toggled)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def _step(self, value: float) -> None:
+        self._t = float(value)
+        self.update()
+
+    def _on_toggled(self, on: bool) -> None:
+        end = 1.0 if on else 0.0
+        if not self.isVisible():  # programmatic setup: no animation
+            self._anim.stop()
+            self._step(end)
+            return
+        self._anim.stop()
+        self._anim.setStartValue(self._t)
+        self._anim.setEndValue(end)
+        self._anim.start()
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        fm = self.fontMetrics()
+        text = self.text()
+        width = 2 * self._PAD + self._W + (self._GAP + fm.horizontalAdvance(text) if text else 0)
+        return QSize(width, max(self._H + 2 * self._PAD, fm.height() + 4))
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        return self.sizeHint()
+
+    def hitButton(self, pos) -> bool:  # noqa: N802
+        return self.rect().contains(pos)
+
+    def focusInEvent(self, event) -> None:  # noqa: N802
+        self._ring = event.reason() != Qt.FocusReason.MouseFocusReason
+        super().focusInEvent(event)
+
+    def focusOutEvent(self, event) -> None:  # noqa: N802
+        self._ring = False
+        super().focusOutEvent(event)
+
+    def paintEvent(self, event) -> None:  # noqa: N802, ARG002
+        pal = self.palette()
+        role = QPalette.ColorRole
+        enabled = self.isEnabled()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not enabled:
+            p.setOpacity(0.45)
+        y = (self.height() - self._H) / 2
+        track = QRectF(self._PAD, y, self._W, self._H)
+        off = mix(pal.color(role.Window), pal.color(role.WindowText), 0.22)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(mix(off, pal.color(role.Highlight), self._t))
+        p.drawRoundedRect(track, self._H / 2, self._H / 2)
+
+        d = self._H - 4
+        p.setPen(QPen(QColor(0, 0, 0, 40), 1))
+        p.setBrush(QColor("#ffffff"))
+        p.drawEllipse(QRectF(track.x() + 2 + (self._W - self._H) * self._t, y + 2, d, d))
+
+        if self._ring and enabled:
+            p.setPen(QPen(pal.color(role.Highlight), 2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(track.adjusted(-1, -1, 1, 1), self._H / 2 + 1, self._H / 2 + 1)
+
+        p.setOpacity(1.0)
+        group = QPalette.ColorGroup.Active if enabled else QPalette.ColorGroup.Disabled
+        p.setPen(pal.color(group, role.WindowText))
+        p.setFont(self.font())
+        text_rect = QRectF(track.right() + self._GAP, 0, self.width() - track.right() - self._GAP, self.height())
+        p.drawText(text_rect, Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.text())
 
 
 def page(*widgets: QWidget) -> QWidget:
