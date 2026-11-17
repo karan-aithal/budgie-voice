@@ -44,7 +44,7 @@ def _palette(window: str, text: str, highlight: str = "#3584e4") -> QPalette:
 
 
 def test_every_icon_renders_with_visible_pixels(app) -> None:
-    assert len(icons._BODY) >= 25
+    assert len(icons._BODY) >= 20
     for name in icons._BODY:
         image = icons.pixmap(name, QColor("#222222"), 16).toImage()
         assert any(image.pixelColor(x, y).alpha() for x in range(image.width()) for y in range(image.height())), name

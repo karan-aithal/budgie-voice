@@ -16,7 +16,7 @@ import logging
 from typing import Literal
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QIcon, QPalette
+from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import QApplication
 
 from budgie_voice.ui.status import Status
@@ -39,20 +39,6 @@ _STATUS_LIGHT = {Status.READY: "#186f33", Status.CONNECTING: "#1a5fb4",
                  Status.UNAVAILABLE: "#b34a00", Status.ERROR: "#c01c28"}
 _STATUS_DARK = {Status.READY: "#57c27a", Status.CONNECTING: "#78aeed",
                 Status.UNAVAILABLE: "#ff9a5c", Status.ERROR: "#ff7b63"}
-
-
-def themed_icon(name: str) -> QIcon:
-    """The desktop theme's icon *name*, else its non-symbolic twin, else an empty icon.
-
-    Never raises and never returns a placeholder: a menu or button simply shows no glyph on a
-    desktop whose icon theme lacks it. Symbolic icons come back mid-grey from Qt, readable
-    (3:1 or better) on both the light and the dark window colours.
-    """
-    for candidate in (name, name.removesuffix("-symbolic")):
-        icon = QIcon.fromTheme(candidate)
-        if not icon.isNull():
-            return icon
-    return QIcon()
 
 
 _applied: str | None = None  # the mode last handed to Qt successfully

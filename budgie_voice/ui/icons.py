@@ -17,20 +17,11 @@ _BODY = {
     "audio-lines": (
         '<path d="M2 10v3"/><path d="M6 6v11"/><path d="M10 3v18"/><path d="M14 8v7"/><path d="M18 5v13"/><path d="M22 10v3"/>'
     ),
-    "ban": (
-        '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>'
-    ),
     "check": (
         '<path d="M20 6 9 17l-5-5"/>'
     ),
-    "chevron-down": (
-        '<path d="m6 9 6 6 6-6"/>'
-    ),
     "chevron-left": (
         '<path d="m15 18-6-6 6-6"/>'
-    ),
-    "circle-alert": (
-        '<circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/>'
     ),
     "circle-check": (
         '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>'
@@ -88,9 +79,6 @@ _BODY = {
     ),
     "sun-moon": (
         '<path d="M12 8a2.83 2.83 0 0 0 4 4 4 4 0 1 1-4-4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.3 17.7-1.4 1.4"/><path d="m19.1 4.9-1.4 1.4"/>'
-    ),
-    "triangle-alert": (
-        '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>'
     ),
     "user-round-plus": (
         '<path d="M2 21a8 8 0 0 1 13.292-6"/><circle cx="10" cy="8" r="5"/><path d="M19 16v6"/><path d="M22 19h-6"/>'

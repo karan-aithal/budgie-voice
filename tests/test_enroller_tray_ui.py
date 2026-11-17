@@ -16,12 +16,11 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PyQt6.QtWidgets")
 
-from PyQt6.QtGui import QIcon, QPixmap  # noqa: E402
+from PyQt6.QtGui import QIcon  # noqa: E402
 from PyQt6.QtWidgets import QApplication, QComboBox, QLabel, QPushButton  # noqa: E402
 
 from budgie_voice.indicator.tray import TrayIcon, TrayState  # noqa: E402
 from budgie_voice.speaker import enroller  # noqa: E402
-from budgie_voice.ui.theme import themed_icon  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -42,24 +41,6 @@ def _tray() -> TrayIcon:
 
 def _actions(tray: TrayIcon) -> list:
     return [a for a in tray.contextMenu().actions() if not a.isSeparator()]
-
-
-# ---------------------------------------------------------------------------
-# themed_icon
-# ---------------------------------------------------------------------------
-
-def _fake_theme(monkeypatch, available: set[str]) -> None:
-    px = QPixmap(8, 8)
-    px.fill()
-    real = QIcon(px)
-    monkeypatch.setattr(QIcon, "fromTheme", staticmethod(lambda name, *a: real if name in available else QIcon()))
-
-
-def test_themed_icon_prefers_symbolic_then_plain_then_empty(qapp, monkeypatch) -> None:
-    _fake_theme(monkeypatch, {"edit-copy-symbolic", "view-refresh"})
-    assert not themed_icon("edit-copy-symbolic").isNull()      # symbolic present
-    assert not themed_icon("view-refresh-symbolic").isNull()   # only the plain twin present
-    assert themed_icon("nothing-here-symbolic").isNull()       # neither: empty icon, no error
 
 
 # ---------------------------------------------------------------------------
