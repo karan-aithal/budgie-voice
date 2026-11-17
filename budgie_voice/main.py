@@ -32,6 +32,7 @@ from budgie_voice.orchestrator.session import SessionState
 from budgie_voice.postprocessing.pipeline import PostProcessingPipeline
 from budgie_voice.speaker.verifier import SpeakerVerifier
 from budgie_voice.utils.aio import dispatch
+from budgie_voice.utils.exceptions import BudgieInjectionError
 from budgie_voice.utils.logging_setup import setup_logging
 from budgie_voice.utils.notify import notify
 
@@ -382,9 +383,16 @@ def _make_injector(settings: Settings) -> TextOutputBackend:
 # ---------------------------------------------------------------------------
 
 class _NullBackend(TextOutputBackend):
+    """Stand-in when no real injection backend could be created.
+
+    Typing fails loudly instead of pretending to work: DictationService turns the error
+    into "Typing failed — text kept: tray → Copy Last Transcript", so the dictation is
+    recoverable. It must never print or log the text: stdout reaches the journal.
+    """
+
     async def start_session(self, target_window_id: int | None) -> None: pass
     async def commit_text(self, text: str) -> None:
-        print(f"[INJECT] {text!r}", flush=True)
+        raise BudgieInjectionError("no injection backend available — see the startup warning in the log")
     async def cancel_session(self) -> None: pass
     async def end_session(self) -> None: pass
     def is_secure_field(self, window_id: int | None) -> bool: return False
