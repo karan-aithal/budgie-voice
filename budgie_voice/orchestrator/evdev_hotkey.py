@@ -159,9 +159,11 @@ class EvdevHotkey:
         loop: The running asyncio event loop.
         hotkey: ``activation.evdev_hotkey``, same ``a+b`` format as ``activation.hotkey``.
         mode: ``"toggle"`` or ``"push_to_hold"``.
+        command_hotkey: Optional second combo for command mode, same mode semantics
+            (``command()`` per press, or ``command_start``/``push_stop`` on press/release).
 
     Raises:
-        ValueError: *hotkey* contains an unknown key name.
+        ValueError: A hotkey contains an unknown key name, or both combos are the same.
     """
 
     def __init__(
@@ -170,17 +172,23 @@ class EvdevHotkey:
         loop: asyncio.AbstractEventLoop,
         hotkey: str,
         mode: str,
+        command_hotkey: str | None = None,
     ) -> None:
         self._service = service
         self._loop = loop
         self._hotkey = hotkey
         self._mode = mode
         self._groups = _parse(hotkey)
-        self._watched = frozenset().union(*self._groups)  # the only codes ever stored
+        self._cgroups = _parse(command_hotkey) if command_hotkey else None
+        if self._cgroups == self._groups:
+            raise ValueError("command_hotkey must differ from the dictation hotkey")
+        # the only codes ever stored
+        self._watched = frozenset().union(*self._groups, *(self._cgroups or ()))
         self._devs: dict[str, evdev.InputDevice] = {}
         self._pressed: dict[str, set[int]] = {}  # per device, so an unplug releases its keys
         self._not_kbd: set[str] = set()
         self._down = False
+        self._cdown = False
         self._next_scan = 0.0
         self._stop = threading.Event()
 
@@ -295,10 +303,18 @@ class EvdevHotkey:
         """Fire on the edge where the full combo becomes held / stops being held."""
         held = set().union(*self._pressed.values())
         down = all(group & held for group in self._groups)
-        if down == self._down:
+        if down != self._down:
+            self._down = down
+            if self._mode == "push_to_hold":
+                dispatch(self._service.push_start() if down else self._service.push_stop(), self._loop)
+            elif down:
+                dispatch(self._service.toggle("evdev"), self._loop)
+        if self._cgroups is None:
             return
-        self._down = down
-        if self._mode == "push_to_hold":
-            dispatch(self._service.push_start() if down else self._service.push_stop(), self._loop)
-        elif down:
-            dispatch(self._service.toggle("evdev"), self._loop)
+        cdown = all(group & held for group in self._cgroups)
+        if cdown != self._cdown:
+            self._cdown = cdown
+            if self._mode == "push_to_hold":
+                dispatch(self._service.command_start() if cdown else self._service.push_stop(), self._loop)
+            elif cdown:
+                dispatch(self._service.command(), self._loop)

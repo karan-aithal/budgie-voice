@@ -25,16 +25,30 @@ from budgie_voice.orchestrator.session import DictationSession, SessionState
 from budgie_voice.orchestrator.corrections import CorrectionMemory
 from budgie_voice.orchestrator.vocab import PersonalVocab
 from budgie_voice.postprocessing.pipeline import PostProcessingPipeline
-from budgie_voice.utils import media
+from budgie_voice.utils import media, selection
 from budgie_voice.utils.exceptions import BudgieSessionError
 from budgie_voice.utils.notify import notify as _notify  # tests patch this name
 
 if TYPE_CHECKING:
     from budgie_voice.inference.client import InferenceClient
     from budgie_voice.inference.protocol import TranscriptSegment
+    from budgie_voice.orchestrator.llm import LlmClient
     from budgie_voice.speaker.verifier import SpeakerVerifier
 
 _LOG = logging.getLogger(__name__)
+
+
+def _build_llm(settings: Settings) -> LlmClient | None:
+    """None unless llm.enabled; disabled means no import and no network, ever."""
+    if not settings.llm.enabled:
+        return None
+    from budgie_voice.orchestrator.llm import LlmClient  # noqa: PLC0415 — only when enabled
+
+    try:
+        return LlmClient(settings.llm)
+    except ValueError as exc:
+        _LOG.error("LLM features disabled: %s", exc)
+        return None
 
 
 class DictationService:
@@ -84,6 +98,8 @@ class DictationService:
         self._profile: dict[str, object] | None = None  # per-app overrides, set per session
         self._wayland_profile_logged = False
         self._paused_players: list[str] = []  # media we paused, to resume at the end
+        self._llm = _build_llm(settings)
+        self._command_sel: str | None = None  # command mode: the text being rewritten, memory only
         self._vocab: PersonalVocab | None = None
         if settings.learning.vocab_enabled:
             self._vocab = PersonalVocab(Path(settings.learning.vocab_path).expanduser())
@@ -111,6 +127,7 @@ class DictationService:
         self._settings = settings
         self._pipeline = pipeline
         self._injector = injector
+        self._llm = _build_llm(settings)
         self._refresh_hotwords()
 
     # ------------------------------------------------------------------
@@ -187,6 +204,30 @@ class DictationService:
         if self._session.is_active:
             await self._stop_session()
 
+    async def command(self) -> None:
+        """Command mode, toggle style: start on the highlighted text, or stop and rewrite it."""
+        if self._session.state == SessionState.IDLE:
+            await self.command_start()
+        else:
+            await self._stop_session()
+
+    async def command_start(self) -> None:
+        """Command mode: record a spoken instruction for the highlighted text.
+
+        Hold mode ends it with ``push_stop``. Nothing happens without a selection or
+        without a working LLM; the user is told which.
+        """
+        if self._session.state != SessionState.IDLE:
+            return
+        if self._llm is None:
+            await _notify(self._settings, "⚠️ Command mode needs llm.enabled with a valid llm.url and llm.model")
+            return
+        sel = await asyncio.get_running_loop().run_in_executor(None, selection.read_primary)
+        if not sel.strip():
+            await _notify(self._settings, "⚠️ Select some text first — nothing changed")
+            return
+        await self._start_session(sel)
+
     async def cancel(self) -> None:
         """Abort the active session without injecting anything (e.g. floating-widget Cancel button)."""
         if self._session.is_active:
@@ -205,7 +246,8 @@ class DictationService:
     # Session management
     # ------------------------------------------------------------------
 
-    async def _start_session(self) -> None:
+    async def _start_session(self, sel: str | None = None) -> None:
+        self._command_sel = sel  # every start resets it, so a dictation is never a command
         window_id = _get_focused_window()
 
         if self._settings.injection.block_secure_fields and self._injector.is_secure_field(window_id):
@@ -237,6 +279,7 @@ class DictationService:
         except BudgieSessionError:
             return
 
+        sel, self._command_sel = self._command_sel, None
         stopped_at = time.monotonic()
         text_ready = False
         try:
@@ -255,9 +298,18 @@ class DictationService:
                 heard = pipeline.run(" ".join(seg.text for seg in self._pending if seg.text))
                 if self._corrections is not None:
                     heard = self._corrections.apply(heard)  # auto-fix known mishears
-                combined = heard
-                if heard and self._on_preview is not None and self._settings.injection.preview_before_inject:
-                    combined = await self._on_preview(heard)
+                text = heard
+                if sel is not None:
+                    text = await self._rewrite(sel, heard)  # heard is the spoken instruction
+                elif self._llm is not None:
+                    text = await self._llm.polish(heard)
+                _LOG.info(
+                    "Stop-to-preview %.2f s (llm=%s)", time.monotonic() - stopped_at,
+                    "on" if self._llm is not None else "off",
+                )
+                combined = text
+                if text and self._on_preview is not None and self._settings.injection.preview_before_inject:
+                    combined = await self._on_preview(text)
                 if combined:
                     self._last_transcript = combined
                     text_ready = True
@@ -267,8 +319,10 @@ class DictationService:
                     await self._injector.commit_text(combined)
                     await self._injector.end_session()
                     # heard vs combined diff = the training signal: what ASR got
-                    # wrong and what the user actually meant.
-                    if self._corrections is not None and combined != heard:
+                    # wrong and what the user actually meant. Only when the user edited
+                    # the preview (combined != text): an untouched polished text must not
+                    # teach the LLM's rewording as ASR mishears. Not for command mode.
+                    if self._corrections is not None and sel is None and combined != text:
                         self._corrections.learn(heard, combined)
                     if self._vocab is not None:
                         self._vocab.update(combined)
@@ -284,7 +338,16 @@ class DictationService:
                 else "Dictation failed — nothing typed"
             )
 
+    async def _rewrite(self, sel: str, instruction: str) -> str:
+        """Command mode: the rewritten text, or "" after telling the user the selection is untouched."""
+        out = await self._llm.rewrite(sel, instruction) if self._llm is not None and instruction else None
+        if out is None:
+            await _notify(self._settings, "⚠️ Command failed — selection unchanged")
+            return ""
+        return out
+
     async def _cancel_session(self) -> None:
+        self._command_sel = None
         await self._stop_capture()
         await self._reset_server()
         self._pending.clear()

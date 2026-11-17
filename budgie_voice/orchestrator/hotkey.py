@@ -121,7 +121,7 @@ class HotkeyManager:
         old = self._settings
         self._settings = settings
         self._hotkey = _parse_hotkey(settings.hotkey)
-        keys = ("hotkey", "evdev_hotkey", "mode", "trigger")
+        keys = ("hotkey", "evdev_hotkey", "command_hotkey", "mode", "trigger")
         if all(getattr(old, k) == getattr(settings, k) for k in keys):
             return
         self.stop()
@@ -144,10 +144,14 @@ class HotkeyManager:
 
         try:
             self._evdev = EvdevHotkey(
-                self._service, self._loop, self._settings.evdev_hotkey, self._settings.mode
+                self._service, self._loop, self._settings.evdev_hotkey, self._settings.mode,
+                command_hotkey=self._settings.command_hotkey or None,
             )
         except ValueError as exc:
-            msg = f"activation.evdev_hotkey {self._settings.evdev_hotkey!r} is invalid ({exc}) — no hotkey"
+            msg = (
+                f"activation.evdev_hotkey {self._settings.evdev_hotkey!r} / "
+                f"command_hotkey {self._settings.command_hotkey!r} is invalid ({exc}) — no hotkey"
+            )
             _LOG.error(msg)
             dispatch(self._service.notify(f"⚠️ {msg}"), self._loop)
             return

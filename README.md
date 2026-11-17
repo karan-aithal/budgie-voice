@@ -44,6 +44,7 @@ Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int
 |---|---|---|
 | `activation.hotkey` | `ctrl+space` | Global hotkey (pynput format) — used when `trigger` is `pynput` |
 | `activation.evdev_hotkey` | `f9` | Same `a+b` format — used when `trigger` is `evdev`. Pick a key applications ignore, see below |
+| `activation.command_hotkey` | `""` (off) | Command-mode key, e.g. `f10`. `evdev` trigger only; needs `llm.enabled`. From a desktop shortcut, call the DBus method `Command` instead |
 | `activation.mode` | `toggle` | `toggle` \| `push_to_hold` |
 | `activation.trigger` | `auto` | Who owns the hotkey: `auto` \| `pynput` \| `evdev` \| `dbus` — see below |
 | `activation.debounce_ms` | `350` | Ignore a repeat from the same source within this window |
@@ -63,6 +64,13 @@ Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int
 | `inference.min_turn_s` | `15` | A pause closes a turn only once it holds this much audio, so short dictations are transcribed in one pass; longer ones stream turn by turn |
 | `learning.dictionary_path` | `~/.config/budgie-voice/dictionary.txt` | Your names and jargon, one per line (`#` comments allowed), sent to the decoder as hotwords together with words you corrected in the preview. Whisper uses them; Parakeet ignores hotwords |
 | `injection.backend` | `auto` | `auto` \| `ydotool` \| `xdotool` |
+| `llm.enabled` | `false` | Optional local LLM (LM Studio or Ollama): **polish** (drops fillers and false starts, applies spoken self-corrections, fixes punctuation) and **command mode**. Off = no import, no network call. If the server is down, slow or answers badly, the unpolished text is used |
+| `llm.url` | `http://127.0.0.1:1234/v1` | OpenAI-style base URL, as LM Studio shows it (Ollama: `http://127.0.0.1:11434/v1`). Budgie calls `<url>/chat/completions`. **Dictated text must not leave the machine by accident:** a host that is not loopback (127.0.0.0/8, `::1`, `localhost`) is refused at startup, with a log line, unless `llm.allow_remote` is `true`. Redirects and proxies are never followed |
+| `llm.model` | *(none)* | The model id your server lists (`curl <llm.url>/models`), e.g. `qwen/qwen3.5-4b`. Must be set. Budgie asks reasoning models (Qwen3.x) not to think (`reasoning_effort: none`); a server that ignores that will usually exceed `timeout_s` and fall back to the unpolished text |
+| `llm.timeout_s` | `8` | Seconds before falling back to the original text |
+| `llm.allow_remote` | `false` | Allow a non-loopback `llm.url`. Your dictation is then sent to that host |
+| `llm.min_words` | `8` | Polish only dictations at least this long; short phrases gain nothing and pay the latency |
+| `llm.max_len_ratio` | `0.5` | A polished answer whose length differs from the input by more than this fraction is rejected |
 | `speaker.enabled` | `true` | Speaker verification on/off |
 | `speaker.threshold` | `0.65` | Cosine similarity cutoff |
 | `vad.aggressiveness` | `2` | Silero VAD 0 (permissive) – 3 (strict) |
@@ -73,6 +81,23 @@ Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int
 | `vad.pre_roll_ms` | `300` | Audio kept from before the first speech chunk so word onsets are not clipped |
 
 Full reference: [`config.yaml.example`](config.yaml.example)
+
+### Local LLM (optional)
+
+Set `llm.enabled: true` and `llm.model` to the model id your local server (LM Studio: start its server, `lms server start`) lists. Everything stays on
+your machine: the URL must be loopback unless you set `llm.allow_remote: true`.
+
+- **Polish** runs after the rule-based cleanup and before the preview, for dictations of at least
+  `llm.min_words` words. The preview shows the polished text. Preview edits are learned only when
+  you change the polished text.
+- **Command mode**: highlight text, press `activation.command_hotkey` (or call the DBus method
+  `Command`), say what to do ("make this more formal"), press again. The rewrite appears in the
+  preview and is typed over the selection on accept. Nothing highlighted → a notification, nothing
+  else. It reads the *primary selection* (`xclip` on X11, `wl-paste` on Wayland), and typing
+  replaces the highlighted text in most GUI apps; terminals keep it, so there you get the rewrite
+  next to the original.
+- Prompts and answers are transcript text: logged at `DEBUG` only. The log line `Stop-to-preview`
+  gives the time from stop to preview, with `llm=on|off`.
 
 ### Hotkey on Wayland vs X11
 
@@ -320,7 +345,8 @@ budgie_voice/
 │   ├── session.py                 # SessionState enum + DictationSession
 │   ├── dictation_service.py       # Policy-only session coordinator
 │   ├── hotkey.py                  # pynput GlobalHotKey listener
-│   └── evdev_hotkey.py            # evdev listener (X11 + Wayland, hold-to-talk)
+│   ├── evdev_hotkey.py            # evdev listener (X11 + Wayland, hold-to-talk)
+│   └── llm.py                     # optional LM Studio/Ollama client: polish + command mode (stdlib HTTP)
 ├── audio/
 │   ├── capture.py                 # sounddevice → asyncio.Queue
 │   ├── denoiser.py                # noisereduce wrapper

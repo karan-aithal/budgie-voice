@@ -8,8 +8,10 @@ activation:
   evdev_hotkey: "f9"      # Same a+b format, used when trigger=evdev. evdev never grabs the
                           # key, so it also reaches the focused app: pick one apps ignore
                           # ("pause" if your keyboard has it and an app binds F9).
+  command_hotkey: ""      # Command mode key (needs llm.enabled; evdev only, e.g. "f10"). Empty = off.
+                          # From a desktop shortcut use the DBus method Command instead.
   mode: "toggle"          # "toggle" | "push_to_hold"
-  trigger: "auto"         # "auto" | "pynput" (X11 only) | "evdev" | "dbus"
+  trigger: "auto"        # "auto" | "pynput" (X11 only) | "evdev" | "dbus"
                           # auto: pynput on X11; on Wayland evdev if a keyboard in /dev/input
                           # is readable, else dbus. evdev needs the input group:
                           #   sudo usermod -aG input $USER   (then log out and in)
@@ -75,6 +77,17 @@ injection:
   backend: "auto"         # "auto" | "ydotool" | "xdotool"
   delay_ms: 12            # xdotool/ydotool keystroke delay
   preview_before_inject: true
+
+# Optional local LLM (LM Studio or Ollama). Off by default; dictation never depends on it.
+# llm:
+#   enabled: true
+#   url: "http://127.0.0.1:1234/v1" # LM Studio; Ollama is http://127.0.0.1:11434/v1.
+#                                   # Non-loopback hosts are refused unless allow_remote: true
+#   model: "qwen/qwen3.5-4b"        # id from `curl <url>/models`; no default
+#   timeout_s: 8                    # slow answer = original text is used
+#   allow_remote: false             # true = dictated text may leave this machine
+#   min_words: 8                    # polish only dictations at least this long
+#   max_len_ratio: 0.5             # polish answer rejected if its length differs more than this
 
 indicator:
   visualizer: "waveform"  # "waveform" | "blob" (double-click the overlay to toggle live)

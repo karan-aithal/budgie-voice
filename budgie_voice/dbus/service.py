@@ -81,6 +81,10 @@ class BudgieDBusService:
                 dispatch(service_ref.toggle("dbus"), loop_ref)
 
             @dbus.service.method(_INTERFACE)
+            def Command(self) -> None:  # noqa: N802
+                dispatch(service_ref.command(), loop_ref)
+
+            @dbus.service.method(_INTERFACE)
             def Reload(self) -> None:  # noqa: N802
                 if on_reload_ref is not None:
                     on_reload_ref()

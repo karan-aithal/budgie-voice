@@ -40,6 +40,11 @@ class ActivationSettings:
     # modifier handling. Some apps bind it; "pause" is the quieter key if yours has one.
     evdev_hotkey: str = "f9"
 
+    # Command mode (needs llm.enabled): select text, press this, speak an instruction.
+    # evdev only; the DBus method Command does the same from a desktop shortcut.
+    # Empty = no key observed at all, so nothing changes until you opt in (e.g. "f10").
+    command_hotkey: str = ""
+
     # Window in which a second toggle from the *same* source is treated as a
     # duplicate. Backstop for key auto-repeat and double-clicks; cross-source
     # duplicates are handled by `trigger` above, not by timing. Load-dependent,
@@ -193,6 +198,24 @@ class InjectionSettings:
 
 
 @dataclass
+class LlmSettings:
+    """Optional local LLM: transcript polish and command mode. Off by default.
+
+    Any OpenAI-compatible server: LM Studio (1234) or Ollama (11434).
+    """
+
+    enabled: bool = False
+    url: str = "http://127.0.0.1:1234/v1"  # LM Studio's default; Ollama is http://127.0.0.1:11434/v1
+    model: str = ""  # no default: the model id your server lists (LM Studio: "qwen/qwen3.5-4b")
+    timeout_s: float = 8.0
+    # Dictated text must not leave the machine by accident: a non-loopback url is refused
+    # unless this is true.
+    allow_remote: bool = False
+    min_words: int = 8  # polish only dictations at least this long
+    max_len_ratio: float = 0.5  # polish answer is rejected if its length differs by more
+
+
+@dataclass
 class IndicatorSettings:
     """Floating recording-overlay configuration."""
 
@@ -227,6 +250,7 @@ class Settings:
     learning: LearningSettings = field(default_factory=LearningSettings)
     postprocessing: PostprocessingSettings = field(default_factory=PostprocessingSettings)
     injection: InjectionSettings = field(default_factory=InjectionSettings)
+    llm: LlmSettings = field(default_factory=LlmSettings)
     indicator: IndicatorSettings = field(default_factory=IndicatorSettings)
     logging: LoggingSettings = field(default_factory=LoggingSettings)
     notifications: NotificationSettings = field(default_factory=NotificationSettings)
