@@ -138,13 +138,13 @@ class DictationService:
         short enough to still permit a deliberate quick stop.
 
         Args:
-            source: Which trigger fired — ``"pynput"``, ``"dbus"``, or ``"tray"``.
-                The first two match ``activation.trigger`` values deliberately, so
-                ownership is a direct comparison. ``"tray"`` is an explicit click
-                and is always allowed.
+            source: Which trigger fired — ``"pynput"``, ``"evdev"``, ``"dbus"``, or
+                ``"tray"``. The first three match ``activation.trigger`` values
+                deliberately, so ownership is a direct comparison. ``"tray"`` is an
+                explicit click and is always allowed.
         """
         owner = self._settings.activation.resolved_trigger()
-        if source in ("pynput", "dbus") and source != owner:
+        if source in ("pynput", "evdev", "dbus") and source != owner:
             _LOG.info(
                 "Toggle from %r ignored — activation.trigger gives the hotkey to %r",
                 source, owner,

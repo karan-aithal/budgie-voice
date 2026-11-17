@@ -48,6 +48,7 @@ pyyaml>=6.0
 PyQt6>=6.6.0
 qasync>=0.27.0
 pynput>=1.7.6
+evdev>=1.6.0
 
 # ── IPC ───────────────────────────────────────────────────────────────────────
 # dbus-python is installed via apt (python3-dbus) — not pip on Ubuntu

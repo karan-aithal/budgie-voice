@@ -112,7 +112,25 @@ async def test_same_source_repeat_within_window_ignored() -> None:
     await svc._cancel_session()
 
 
+async def test_evdev_owner_accepts_evdev_and_rejects_the_others() -> None:
+    svc = _service(trigger="evdev")
+
+    await svc.toggle("pynput")
+    await svc.toggle("dbus")
+    svc._adapter.open.assert_not_called()
+    assert svc.state == SessionState.IDLE
+
+    await svc.toggle("evdev")
+    assert svc._adapter.open.call_count == 1
+
+    await svc._cancel_session()
+
+
 def test_auto_resolves_per_session_type(monkeypatch: pytest.MonkeyPatch) -> None:
+    from budgie_voice.orchestrator import evdev_hotkey  # noqa: PLC0415
+
+    # No readable keyboard: Wayland falls back to dbus. (Backend choice itself: test_phase6.)
+    monkeypatch.setattr(evdev_hotkey, "auto_backend", lambda: "dbus")
     a = ActivationSettings()
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
     assert a.resolved_trigger() == "dbus"  # pynput is blind on Wayland

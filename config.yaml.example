@@ -5,10 +5,15 @@
 
 activation:
   hotkey: "ctrl+space"    # Any combo parseable by pynput (used when trigger=pynput)
+  evdev_hotkey: "f9"      # Same a+b format, used when trigger=evdev. evdev never grabs the
+                          # key, so it also reaches the focused app: pick one apps ignore
+                          # ("pause" if your keyboard has it and an app binds F9).
   mode: "toggle"          # "toggle" | "push_to_hold"
-  trigger: "auto"         # "auto" | "pynput" (X11 only) | "dbus" (X11 + Wayland)
-                          # auto: pynput on X11, dbus on Wayland. Only the owner
-                          # may toggle — prevents one press firing twice.
+  trigger: "auto"         # "auto" | "pynput" (X11 only) | "evdev" | "dbus"
+                          # auto: pynput on X11; on Wayland evdev if a keyboard in /dev/input
+                          # is readable, else dbus. evdev needs the input group:
+                          #   sudo usermod -aG input $USER   (then log out and in)
+                          # Only the owner may toggle — prevents one press firing twice.
   debounce_ms: 350        # Drop a repeat from the same source inside this window
 
 audio:

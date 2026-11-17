@@ -280,20 +280,22 @@ async def main_async() -> bool:
     # ------------------------------------------------------------------
     # Hotkey manager
     # ------------------------------------------------------------------
-    # Only start the in-process listener if it owns the hotkey. On Wayland it
-    # can't see global keys anyway, and running it alongside a GNOME shortcut
-    # that calls DBus Toggle double-fires every press.
+    # Only start an in-process listener if it owns the hotkey: running one
+    # alongside a GNOME shortcut that calls DBus Toggle double-fires every press.
     trigger = settings.activation.resolved_trigger()
+    _LOG.info(
+        "Hotkey owned by %r (activation.trigger=%r, session=%s)",
+        trigger, settings.activation.trigger, os.environ.get("XDG_SESSION_TYPE", "unknown"),
+    )
     hotkey = HotkeyManager(dict_svc, loop, settings.activation)
-    if trigger == "pynput":
+    if trigger in ("pynput", "evdev"):
         hotkey.start()
     else:
         _LOG.info(
-            "Hotkey owned by %r (activation.trigger=%r, session=%s) — pynput listener not started; "
-            "bind %s to a desktop shortcut running: dbus-send --session --type=method_call "
-            "--dest=io.gitlab.karanaithal841.BudgieVoice /io/gitlab/karanaithal841/BudgieVoice io.gitlab.karanaithal841.BudgieVoice.Toggle",
-            trigger, settings.activation.trigger,
-            os.environ.get("XDG_SESSION_TYPE", "unknown"), settings.activation.hotkey,
+            "No in-process listener; bind %s to a desktop shortcut running: dbus-send --session "
+            "--type=method_call --dest=io.gitlab.karanaithal841.BudgieVoice "
+            "/io/gitlab/karanaithal841/BudgieVoice io.gitlab.karanaithal841.BudgieVoice.Toggle",
+            settings.activation.hotkey,
         )
 
     # ------------------------------------------------------------------
@@ -306,7 +308,7 @@ async def main_async() -> bool:
             pass
 
     print(
-        f"Budgie ready — {settings.activation.hotkey} ({settings.activation.mode}).  Ctrl+C to exit.",
+        f"Budgie ready — {settings.activation.active_hotkey()} ({settings.activation.mode}).  Ctrl+C to exit.",
         flush=True,
     )
 

@@ -74,8 +74,9 @@ Exactly **one** mechanism may own the hotkey, chosen by `activation.trigger`:
 | `trigger` | Who fires the toggle | Works on |
 |---|---|---|
 | `pynput` | in-process global listener, using `activation.hotkey` | X11 only |
-| `dbus` | external caller (desktop shortcut) invoking `Toggle` | X11 **and** Wayland |
-| `auto` *(default)* | `pynput` on X11, `dbus` on Wayland — from `XDG_SESSION_TYPE` | both |
+| `evdev` | in-process listener on `/dev/input`, using `activation.evdev_hotkey`; supports `push_to_hold` | X11 **and** Wayland |
+| `dbus` | external caller (desktop shortcut) invoking `Toggle`; no key-release, so no `push_to_hold` | X11 **and** Wayland |
+| `auto` *(default)* | `pynput` on X11; on Wayland `evdev` if a keyboard under `/dev/input` is readable, else `dbus` — from `XDG_SESSION_TYPE`. The choice and reason are logged | both |
 
 This matters because both can be live at once: pynput sees the key press *and* a GNOME
 shortcut fires `Toggle`, so a single press toggles twice — starting a session and immediately
@@ -100,6 +101,42 @@ Leaving this shortcut installed on X11 is safe: with `trigger: auto` pynput owns
 and the shortcut's `Toggle` is rejected (logged as `Toggle from 'dbus' ignored`). Set
 `trigger: dbus` to hand ownership to the shortcut instead — the one setting that behaves
 identically on X11 and Wayland.
+
+#### The `evdev` trigger
+
+Reads key events straight from `/dev/input/event*`, so it needs no X11 and no desktop shortcut,
+and it is the only option besides pynput that sees the key *release* (hold-to-talk) — on Wayland
+it is the only one.
+
+- **Needs the `input` group.** The device nodes are `root:input`, mode `0660`. Budgie never
+  changes group membership for you; run it yourself, then log out and back in:
+
+  ```bash
+  sudo usermod -aG input $USER
+  ```
+
+  (A udev rule granting your user read access to `/dev/input/event*` works too.) With
+  `trigger: evdev` and no readable keyboard, Budgie logs an error and sends a notification
+  naming this fix.
+- **Never grabs a device** (no `EVIOCGRAB`, no uinput re-emit), so a hang can't take your keyboard
+  away. The consequence: **the hotkey still reaches the focused application**, exactly as with
+  pynput. The default is `f9`: it exists on laptop and full-size keyboards alike, and as a single
+  key it needs no modifier handling for hold-to-talk. `ctrl+space` is not the default here
+  (editor autocomplete, input-method switching). The catch: some applications bind F9 themselves,
+  so a press can also do something there. If one does, pick another key — `pause` is ignored by
+  applications and keeps no state, but many laptops lack it. `scroll_lock` toggles a keyboard LED;
+  `right_ctrl` fires whenever you use it as a real Ctrl.
+- **Reads only the hotkey.** Key codes that aren't part of `activation.evdev_hotkey` are never
+  looked at, stored or logged. Each opened device is logged by name (`evdev: opened 'AT Translated
+  Set 2 keyboard' (/dev/input/event3)`).
+- **Check the log for your keyboard.** Budgie can't tell a drawing tablet's button pad from your
+  keyboard — both are "devices with letter keys". If some devices are unreadable, it says so in the
+  log and in a notification, listing which ones it *can* read. If your keyboard isn't listed, you
+  need the group above.
+- Keyboards plugged in or removed while running are picked up within ~2 s.
+- Key names: letters, digits, `ctrl`, `right_ctrl`, `alt`, `shift`, `super`, `space`, `tab`, `esc`,
+  `enter`, `pause`, `scroll_lock`, `f1`–`f12`. Left/right variants of `ctrl`/`alt`/`shift`/`super`
+  both match; `right_ctrl` matches the right one only. These names work for pynput too.
 
 ### Tray icon states
 
@@ -275,7 +312,8 @@ budgie_voice/
 ├── orchestrator/
 │   ├── session.py                 # SessionState enum + DictationSession
 │   ├── dictation_service.py       # Policy-only session coordinator
-│   └── hotkey.py                  # pynput GlobalHotKey listener
+│   ├── hotkey.py                  # pynput GlobalHotKey listener
+│   └── evdev_hotkey.py            # evdev listener (X11 + Wayland, hold-to-talk)
 ├── audio/
 │   ├── capture.py                 # sounddevice → asyncio.Queue
 │   ├── denoiser.py                # noisereduce wrapper

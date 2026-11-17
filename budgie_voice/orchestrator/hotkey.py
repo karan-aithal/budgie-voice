@@ -1,4 +1,7 @@
-"""HotkeyManager — global hotkey listener via pynput.
+"""HotkeyManager — global hotkey listener: pynput (X11) or evdev (X11 + Wayland).
+
+Which one runs is ``activation.resolved_trigger()``; the evdev listener lives in
+:mod:`budgie_voice.orchestrator.evdev_hotkey`.
 
 Supports two activation modes:
 
@@ -21,6 +24,7 @@ from budgie_voice.utils.aio import dispatch
 if TYPE_CHECKING:
     from budgie_voice.config.settings import ActivationSettings
     from budgie_voice.orchestrator.dictation_service import DictationService
+    from budgie_voice.orchestrator.evdev_hotkey import EvdevHotkey
 
 _LOG = logging.getLogger(__name__)
 
@@ -50,8 +54,10 @@ _KEY_MAP: dict[str, pynput.keyboard.Key] = {
     "tab":   pynput.keyboard.Key.tab,
     "esc":   pynput.keyboard.Key.esc,
     "enter": pynput.keyboard.Key.enter,
-    "f1":    pynput.keyboard.Key.f1,  "f2": pynput.keyboard.Key.f2,
-    "f3":    pynput.keyboard.Key.f3,  "f4": pynput.keyboard.Key.f4,
+    "right_ctrl":  pynput.keyboard.Key.ctrl_r,  # side-specific, see HotkeyManager._normalise
+    "pause":       pynput.keyboard.Key.pause,
+    "scroll_lock": pynput.keyboard.Key.scroll_lock,
+    **{f"f{n}": getattr(pynput.keyboard.Key, f"f{n}") for n in range(1, 13)},
 }
 
 
@@ -91,10 +97,14 @@ class HotkeyManager:
         self._hotkey = _parse_hotkey(settings.hotkey)
         self._pressed: set[pynput.keyboard.Key | pynput.keyboard.KeyCode] = set()
         self._listener: pynput.keyboard.Listener | None = None
+        self._evdev: EvdevHotkey | None = None
         self._push_active = False
 
     def start(self) -> None:
-        """Start listening for the global hotkey in a background thread."""
+        """Start the listener that owns the hotkey, in a background thread."""
+        if self._settings.resolved_trigger() == "evdev":
+            self._start_evdev()
+            return
         self._listener = pynput.keyboard.Listener(
             on_press=self._on_press,
             on_release=self._on_release,
@@ -111,12 +121,13 @@ class HotkeyManager:
         old = self._settings
         self._settings = settings
         self._hotkey = _parse_hotkey(settings.hotkey)
-        if (old.hotkey, old.mode, old.trigger) == (settings.hotkey, settings.mode, settings.trigger):
+        keys = ("hotkey", "evdev_hotkey", "mode", "trigger")
+        if all(getattr(old, k) == getattr(settings, k) for k in keys):
             return
         self.stop()
         self._pressed.clear()
         self._push_active = False
-        if settings.resolved_trigger() == "pynput":
+        if settings.resolved_trigger() in ("pynput", "evdev"):
             self.start()
 
     def stop(self) -> None:
@@ -124,6 +135,23 @@ class HotkeyManager:
         if self._listener is not None:
             self._listener.stop()
             self._listener = None
+        if self._evdev is not None:
+            self._evdev.stop()
+            self._evdev = None
+
+    def _start_evdev(self) -> None:
+        from budgie_voice.orchestrator.evdev_hotkey import EvdevHotkey  # noqa: PLC0415 — python-evdev only needed here
+
+        try:
+            self._evdev = EvdevHotkey(
+                self._service, self._loop, self._settings.evdev_hotkey, self._settings.mode
+            )
+        except ValueError as exc:
+            msg = f"activation.evdev_hotkey {self._settings.evdev_hotkey!r} is invalid ({exc}) — no hotkey"
+            _LOG.error(msg)
+            dispatch(self._service.notify(f"⚠️ {msg}"), self._loop)
+            return
+        self._evdev.start()
 
     # ------------------------------------------------------------------
     # pynput callbacks (background thread)
@@ -159,14 +187,14 @@ class HotkeyManager:
     def _dispatch(self, coro: object) -> None:
         dispatch(coro, self._loop)  # type: ignore[arg-type]
 
-    @staticmethod
     def _normalise(
-        key: pynput.keyboard.Key | pynput.keyboard.KeyCode,
+        self, key: pynput.keyboard.Key | pynput.keyboard.KeyCode,
     ) -> pynput.keyboard.Key | pynput.keyboard.KeyCode:
         """Normalise left/right modifier variants to canonical form.
 
         Linux/X11 reports ``ctrl_l``/``ctrl_r`` etc., never the generic
         ``Key.ctrl`` that ``_KEY_MAP`` uses — without this mapping the
-        hotkey's ``issubset`` check can never match.
+        hotkey's ``issubset`` check can never match. A side the hotkey names
+        explicitly (``right_ctrl``) is left alone so only that side matches.
         """
-        return _MODIFIER_ALIASES.get(key, key)
+        return key if key in self._hotkey else _MODIFIER_ALIASES.get(key, key)

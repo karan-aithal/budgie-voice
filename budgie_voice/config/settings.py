@@ -26,10 +26,19 @@ class ActivationSettings:
     # the combo AND a GNOME custom shortcut fires the DBus Toggle method),
     # which starts a session and immediately stops it.
     #   "pynput" — in-process global listener. X11 only; needs no desktop setup.
+    #   "evdev"  — in-process listener on /dev/input. X11 and Wayland, supports
+    #              push_to_hold; needs read access to /dev/input (input group).
     #   "dbus"   — external caller (GNOME custom shortcut) invokes Toggle.
-    #              The only option that works on native Wayland.
+    #              Works everywhere, but has no key-release, so no push_to_hold.
     #   "auto"   — pick from the session type (see resolved_trigger).
-    trigger: Literal["auto", "pynput", "dbus"] = "auto"
+    trigger: Literal["auto", "pynput", "evdev", "dbus"] = "auto"
+
+    # Hotkey used when evdev owns the key. Separate from `hotkey` so nothing changes
+    # for pynput users: evdev cannot grab the key, so it also reaches the focused app,
+    # and ctrl+space collides with editor autocomplete and input-method switching.
+    # F9: on laptop and full-size keyboards alike, one key so hold-to-talk needs no
+    # modifier handling. Some apps bind it; "pause" is the quieter key if yours has one.
+    evdev_hotkey: str = "f9"
 
     # Window in which a second toggle from the *same* source is treated as a
     # duplicate. Backstop for key auto-repeat and double-clicks; cross-source
@@ -37,16 +46,28 @@ class ActivationSettings:
     # so it stays a knob: raise it if repeats still slip through.
     debounce_ms: int = 350
 
-    def resolved_trigger(self) -> Literal["pynput", "dbus"]:
+    def resolved_trigger(self) -> Literal["pynput", "evdev", "dbus"]:
         """Resolve ``"auto"`` against the current session type.
 
         pynput cannot observe global keys on native Wayland (the protocol has
-        no client-side global grab), so Wayland must be driven over DBus. X11
-        prefers pynput because it needs no desktop configuration.
+        no client-side global grab). X11 prefers pynput because it needs no
+        desktop configuration and no ``input`` group. Wayland uses evdev when a
+        keyboard device is readable, else DBus.
         """
         if self.trigger != "auto":
             return self.trigger  # type: ignore[return-value]
-        return "dbus" if os.environ.get("XDG_SESSION_TYPE") == "wayland" else "pynput"
+        if os.environ.get("XDG_SESSION_TYPE") != "wayland":
+            return "pynput"
+        try:
+            from budgie_voice.orchestrator.evdev_hotkey import auto_backend  # noqa: PLC0415 — evdev only matters on Wayland
+        except ImportError:
+            _LOG.warning("trigger auto → dbus: python-evdev is not installed")
+            return "dbus"
+        return auto_backend()
+
+    def active_hotkey(self) -> str:
+        """The hotkey string that is live for the resolved trigger."""
+        return self.evdev_hotkey if self.resolved_trigger() == "evdev" else self.hotkey
 
 
 @dataclass
