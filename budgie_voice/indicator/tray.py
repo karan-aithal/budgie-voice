@@ -56,7 +56,6 @@ class TrayState(StrEnum):
     IDLE = "idle"
     STARTING = "starting"
     RECORDING = "recording"
-    TRANSCRIBING = "transcribing"
     FINALIZING = "finalizing"
     COMPLETED = "completed"
     LOW_CONFIDENCE = "low_confidence"
@@ -70,7 +69,6 @@ _STATE_CONFIG: dict[TrayState, tuple[str, str]] = {
     TrayState.IDLE:           ("blue", "Budgie — ready to dictate"),
     TrayState.STARTING:       ("yellow", "Budgie — starting…"),
     TrayState.RECORDING:      ("green", "Budgie — listening"),
-    TrayState.TRANSCRIBING:   ("purple", "Budgie — transcribing…"),
     TrayState.FINALIZING:     ("purple", "Budgie — finishing…"),
     TrayState.COMPLETED:      ("green", "Budgie — done"),
     TrayState.LOW_CONFIDENCE: ("orange", "Budgie — couldn't hear clearly"),
@@ -80,7 +78,7 @@ _STATE_CONFIG: dict[TrayState, tuple[str, str]] = {
 
 # The Toggle action is the same action in every state; only its wording follows what it will do.
 _STOP_STATES = frozenset({TrayState.STARTING, TrayState.RECORDING})
-_BUSY_STATES = frozenset({TrayState.TRANSCRIBING, TrayState.FINALIZING})
+_BUSY_STATES = frozenset({TrayState.FINALIZING})
 
 
 class TrayIcon(QSystemTrayIcon):

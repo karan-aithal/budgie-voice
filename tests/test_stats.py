@@ -94,17 +94,6 @@ def test_daily_aggregation(mixed) -> None:
     }
 
 
-def test_seven_and_thirty_day_ranges_are_inclusive_of_today(store) -> None:
-    for n, back in enumerate((0, 6, 7, 29, 30)):
-        _add(store, n, TODAY - timedelta(days=back), 10 * (n + 1), 1_000)
-    for days, expected in ((7, {TODAY, TODAY - timedelta(days=6)}),
-                           (30, {TODAY, TODAY - timedelta(days=6), TODAY - timedelta(days=7),
-                                 TODAY - timedelta(days=29)})):
-        since, until = stats.last_days(days, TODAY)
-        assert set(stats.daily(store, since, until)) == expected
-    assert len(stats.daily(store)) == 5  # all time
-
-
 def test_the_day_is_the_stored_local_day_not_the_utc_day(store) -> None:
     # Same UTC date, two different local days (a user in UTC+14 around local midnight).
     _add(store, 1, date(2026, 11, 18), 5, 1_000, started=datetime(2026, 11, 18, 9, 59, tzinfo=timezone.utc))

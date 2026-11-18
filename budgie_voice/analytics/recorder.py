@@ -68,7 +68,7 @@ class SessionRecorder:
             self._open = _Open(uuid.uuid4().hex, self._clock(), self._mono())
             return
         cur = self._open
-        if state in ("finalizing", "transcribing"):
+        if state == "finalizing":
             if cur is not None and cur.stop is None:
                 cur.stop = self._mono()
             return

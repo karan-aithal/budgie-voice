@@ -19,8 +19,6 @@ onnx-asr>=0.12.0          # Parakeet-TDT backend (CPU, ~3.6x lower latency than
 fastapi>=0.110.0
 uvicorn>=0.29.0
 websockets>=12.0
-python-multipart>=0.0.9   # required by FastAPI File()/Form() uploads
-soundfile>=0.12.1         # /v1/audio/transcriptions in-memory file decode
 
 # ── Audio capture ─────────────────────────────────────────────────────────────
 sounddevice>=0.4.6
@@ -30,15 +28,14 @@ noisereduce>=3.0.0
 word2number>=1.1
 
 # ── Deep learning (VAD + speaker verify) ─────────────────────────────────────
-# torch / torchaudio: install separately with the correct index URL (see above)
+# torch / torchaudio: install separately with the correct index URL (see above).
+# torchaudio is not listed below: nothing here imports it, and speechbrain requires it anyway.
 torch>=2.0.0
-torchaudio>=2.0.0
 # Silero VAD is loaded via torch.hub — no pip package required
 speechbrain>=1.0.0
 
 # ── Numerics ──────────────────────────────────────────────────────────────────
 numpy>=1.26.0
-scipy>=1.11.0
 
 # ── Config ────────────────────────────────────────────────────────────────────
 pyyaml>=6.0
@@ -53,6 +50,4 @@ evdev>=1.6.0
 # dbus-python is installed via apt (python3-dbus) — not pip on Ubuntu
 # dbus-python>=1.3.2
 
-# ── Testing ───────────────────────────────────────────────────────────────────
-pytest>=8.0.0
-pytest-asyncio>=0.23.0
+# Testing: see requirements-dev.txt

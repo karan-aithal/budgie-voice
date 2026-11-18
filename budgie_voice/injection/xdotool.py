@@ -97,10 +97,6 @@ class XdotoolBackend(TextOutputBackend):
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._inject_sync, text)
 
-    async def cancel_session(self) -> None:
-        """Discard session state; no text is injected."""
-        self._window_id = None
-
     async def end_session(self) -> None:
         """Release session state."""
         self._window_id = None

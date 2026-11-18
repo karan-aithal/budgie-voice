@@ -186,9 +186,7 @@ class HistoryPage(QWidget):
         for edit in (self._from, self._to):
             edit.clear()
         for combo in (self._status, self._sort):
-            combo.blockSignals(True)
-            combo.setCurrentIndex(0)
-            combo.blockSignals(False)
+            combo.setCurrentIndex(0)  # each change reloads; cheap, and the last one shows the cleared state
         self.refresh()
 
     def _filter(self) -> Filter:
@@ -250,7 +248,7 @@ class HistoryPage(QWidget):
         for i, r in enumerate(self._rows):
             item = QTreeWidgetItem([
                 f"{r.local_date:%d %b %Y}", f"{r.started_at.astimezone():%H:%M}", _duration(r.duration_ms),
-                f"{r.words:,}", f"{r.chars:,}", r.status.capitalize(),
+                f"{r.words:,}", f"{r.chars:,}", r.result,
             ])
             item.setData(0, Qt.ItemDataRole.UserRole, i)
             for col in (2, 3, 4):
@@ -276,7 +274,7 @@ class HistoryPage(QWidget):
             "Words": f"{row.words:,}" if row else "—",
             "Characters": f"{row.chars:,}" if row else "—",
             "Speed": f"{wpm:.0f} words per minute" if wpm is not None else "—",
-            "Result": row.status.capitalize() if row else "—",
+            "Result": row.result if row else "—",
             "Session": row.id if row else "—",
         }
         for key, text in values.items():

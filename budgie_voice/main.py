@@ -46,7 +46,6 @@ _SESSION_TO_TRAY: dict[SessionState, str] = {
     SessionState.IDLE:         "idle",
     SessionState.STARTING:     "starting",
     SessionState.RECORDING:    "recording",
-    SessionState.TRANSCRIBING: "transcribing",
     SessionState.FINALIZING:   "finalizing",
     SessionState.COMPLETED:    "completed",
     SessionState.CANCELLED:    "cancelled",
@@ -305,7 +304,7 @@ async def main_async() -> bool:
         def _update_recorder_widget(state: SessionState) -> None:
             if state == SessionState.RECORDING:
                 recorder_widget.show_recording()
-            elif state == SessionState.TRANSCRIBING or state == SessionState.FINALIZING:
+            elif state == SessionState.FINALIZING:
                 recorder_widget.show_transcribing()
             else:
                 recorder_widget.hide_widget()
@@ -436,7 +435,6 @@ class _NullBackend(TextOutputBackend):
     async def start_session(self, target_window_id: int | None) -> None: pass
     async def commit_text(self, text: str) -> None:
         raise BudgieInjectionError("no injection backend available — see the startup warning in the log")
-    async def cancel_session(self) -> None: pass
     async def end_session(self) -> None: pass
     def is_secure_field(self, window_id: int | None) -> bool: return False
 

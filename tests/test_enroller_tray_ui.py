@@ -51,7 +51,6 @@ def _actions(tray: TrayIcon) -> list:
     (TrayState.IDLE, "Start Dictation"),
     (TrayState.STARTING, "Stop Dictation"),
     (TrayState.RECORDING, "Stop Dictation"),
-    (TrayState.TRANSCRIBING, "Finishing…"),
     (TrayState.FINALIZING, "Finishing…"),
     (TrayState.COMPLETED, "Start Dictation"),
     (TrayState.CANCELLED, "Start Dictation"),

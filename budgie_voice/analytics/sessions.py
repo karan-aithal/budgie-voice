@@ -33,6 +33,13 @@ class SessionRow:
     cursor: Cursor
 
     @property
+    def result(self) -> str:
+        """Display label. A completed session that typed nothing (empty dictation, dismissed preview) says so."""
+        if self.status == "completed" and self.words == 0:
+            return "Completed, nothing typed"
+        return self.status.capitalize()
+
+    @property
     def wpm(self) -> float | None:
         """Words per minute of this session's recording; None when it typed nothing or has no duration."""
         return self.words / (self.duration_ms / 60_000) if self.words > 0 and self.duration_ms > 0 else None

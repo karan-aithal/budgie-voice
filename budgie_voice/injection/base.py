@@ -93,10 +93,6 @@ class TextOutputBackend(ABC):
         """
 
     @abstractmethod
-    async def cancel_session(self) -> None:
-        """Abort the current session; discard any uncommitted text."""
-
-    @abstractmethod
     async def end_session(self) -> None:
         """Finalise the session and release resources."""
 

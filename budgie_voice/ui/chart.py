@@ -26,16 +26,15 @@ class BarChart(QWidget):
 
     _L, _R, _T, _B = 40, 8, 10, 24  # plot margins: y labels, right, top, x labels
 
-    def __init__(self, unit: str = "words") -> None:
+    def __init__(self) -> None:
         super().__init__()
-        self._unit = unit
         self._data: dict[date, int] = {}
         self._days = 7
         self._today: date | None = None  # tests pin it; otherwise the real date
         self._hover: int | None = None
         self.setMouseTracking(True)
         self.setMinimumHeight(180)
-        self.setAccessibleName(f"{unit.capitalize()} per day")
+        self.setAccessibleName("Words per day")
 
     # -- data ------------------------------------------------------------------
 
@@ -57,7 +56,7 @@ class BarChart(QWidget):
 
     def tooltip_at(self, index: int) -> str:
         d, v = self.series()[index]
-        return f"{d:%a %d %b}: {v} {self._unit}"
+        return f"{d:%a %d %b}: {v} words"
 
     # -- geometry --------------------------------------------------------------
 

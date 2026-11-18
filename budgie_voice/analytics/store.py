@@ -85,16 +85,12 @@ class HistoryStore:
                 raise _NewerSchema
             if version < SCHEMA_VERSION:
                 con.execute("PRAGMA journal_mode=WAL")  # persists in the file; not allowed inside a transaction
-                con.execute("BEGIN IMMEDIATE")
-                try:
-                    for statement in _SCHEMA.split(";"):
-                        if statement.strip():
-                            con.execute(statement)
-                    con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
-                    con.execute("COMMIT")
-                except BaseException:
-                    con.execute("ROLLBACK")
-                    raise
+                con.execute("BEGIN IMMEDIATE")  # an error leaves it open; closing the connection rolls it back
+                for statement in _SCHEMA.split(";"):
+                    if statement.strip():
+                        con.execute(statement)
+                con.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+                con.execute("COMMIT")
 
     # -- writing -----------------------------------------------------------
 
@@ -104,18 +100,14 @@ class HistoryStore:
             return False
         try:
             with closing(self._connect()) as con:
-                con.execute("BEGIN IMMEDIATE")
-                try:
-                    con.execute(
-                        # Only a repeated id is ignored. (OR IGNORE would also hide a failed CHECK.)
-                        "INSERT INTO dictation_sessions VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING",
-                        (rec.id, _utc(rec.started_at), rec.local_date.isoformat(), rec.duration_ms,
-                         rec.words, rec.chars, rec.status),
-                    )
-                    con.execute("COMMIT")
-                except BaseException:
-                    con.execute("ROLLBACK")
-                    raise
+                con.execute("BEGIN IMMEDIATE")  # a failure leaves it open; closing the connection rolls it back
+                con.execute(
+                    # Only a repeated id is ignored. (OR IGNORE would also hide a failed CHECK.)
+                    "INSERT INTO dictation_sessions VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING",
+                    (rec.id, _utc(rec.started_at), rec.local_date.isoformat(), rec.duration_ms,
+                     rec.words, rec.chars, rec.status),
+                )
+                con.execute("COMMIT")
         except Exception as exc:  # noqa: BLE001 — see class docstring
             self._problem("could not save a dictation to history", exc, rec.id)
             return False

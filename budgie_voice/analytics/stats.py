@@ -1,7 +1,8 @@
 """Productivity statistics, computed live from the saved sessions. Plain Python, no Qt.
 
 Nothing is cached or stored: delete a row and every number follows. One query returns one line per
-local calendar day; all-time totals, the 7- and 30-day ranges and the chart are all sums of those lines.
+local calendar day; the all-time totals and the chart (which shows the last 7 or 30 of those days) are
+all sums of those lines.
 
 Metric definitions (the only place they are written down):
 
@@ -18,7 +19,7 @@ Metric definitions (the only place they are written down):
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from typing import Iterable
 
 from budgie_voice.analytics.store import HistoryStore
@@ -31,7 +32,6 @@ SELECT local_date,
   SUM(CASE WHEN words_count > 0 AND duration_ms > 0 THEN words_count ELSE 0 END),
   SUM(CASE WHEN words_count > 0 AND duration_ms > 0 THEN duration_ms ELSE 0 END)
 FROM dictation_sessions
-WHERE local_date BETWEEN ? AND ?
 GROUP BY local_date
 ORDER BY local_date
 """
@@ -56,16 +56,10 @@ class Stats:
         return self.rate_words / (self.rate_ms / 60_000) if self.rate_ms > 0 else None
 
 
-def daily(store: HistoryStore, since: date | None = None, until: date | None = None) -> dict[date, Stats]:
-    """Stats per local day, both ends inclusive (open-ended when ``None``). Days with no sessions are absent."""
-    rows = store.read(_DAILY, ((since or date.min).isoformat(), (until or date.max).isoformat()))
-    return {date.fromisoformat(r[0]): Stats(*(int(v or 0) for v in r[1:])) for r in rows}
+def daily(store: HistoryStore) -> dict[date, Stats]:
+    """Stats for every local day that has sessions (days with none are absent)."""
+    return {date.fromisoformat(r[0]): Stats(*(int(v or 0) for v in r[1:])) for r in store.read(_DAILY)}
 
 
 def total(days: Iterable[Stats]) -> Stats:
     return sum(days, Stats())
-
-
-def last_days(n: int, today: date) -> tuple[date, date]:
-    """The inclusive range for "last *n* days": *today* and the n-1 days before it."""
-    return today - timedelta(days=n - 1), today

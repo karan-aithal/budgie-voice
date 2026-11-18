@@ -113,7 +113,7 @@ def test_recent_list_is_capped_at_five_newest_first(app) -> None:
 # -- chart -------------------------------------------------------------------
 
 def _chart(days: int = 7, data=None) -> BarChart:
-    c = BarChart("words")
+    c = BarChart()
     c._today = date(2026, 11, 18)
     c.set_days(days)
     c.set_data(data or {})

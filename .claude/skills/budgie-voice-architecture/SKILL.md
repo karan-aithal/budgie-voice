@@ -131,5 +131,6 @@ budgie_voice/settings_ui/, budgie_voice/indicator/, budgie_voice/dbus/   USER IN
    `budgie_voice/settings_ui/`.
 
 For the full original design rationale (diagrams, IPC details, model
-runtime notes), see `budgie_master_prompt.md` and `Speech.md` at the repo root
-— this skill is the condensed, enforceable checklist version of those.
+runtime notes), see `budgie_master_prompt.md` and `Speech.md` in git history
+(`git log --all -- budgie_master_prompt.md`); they were removed from the tree.
+This skill is the condensed, enforceable checklist version of those.

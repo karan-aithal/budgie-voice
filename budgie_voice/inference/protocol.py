@@ -18,8 +18,6 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 
-PROTOCOL_VERSION = 2
-
 
 @dataclass
 class AudioFrame:

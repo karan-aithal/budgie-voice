@@ -159,6 +159,16 @@ def test_a_sessions_own_speed() -> None:
     assert sessions.SessionRow("a", BASE, BASE.date(), 0, 5, 25, "completed", ("", "")).wpm is None
 
 
+def test_a_completed_session_that_typed_nothing_says_so(app, store) -> None:
+    _add(store, 1, BASE, words=0)
+    _add(store, 2, BASE + timedelta(days=1), words=0, status="cancelled")
+    _add(store, 3, BASE + timedelta(days=2), words=4)
+    page = _page(store)
+    assert [r[5] for r in _table(page)] == ["Completed", "Cancelled", "Completed, nothing typed"]  # newest first
+    page._list.setCurrentItem(page._list.topLevelItem(2))
+    assert page._facts["Result"].text() == "Completed, nothing typed"
+
+
 # ---------------------------------------------------------------------------
 # The page
 # ---------------------------------------------------------------------------

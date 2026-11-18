@@ -397,6 +397,7 @@ Then set `inference.device: cuda` and `inference.compute_type: float16`.
 ### Tests
 
 ```bash
+pip install -r requirements-dev.txt   # pytest + pytest-asyncio, on top of requirements.txt
 pytest tests/ -v
 ```
 
@@ -478,6 +479,7 @@ scripts/
 └── uninstall_service.sh
 config.yaml.example
 requirements.txt
+requirements-dev.txt
 ```
 
 ---

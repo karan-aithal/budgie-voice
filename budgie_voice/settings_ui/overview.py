@@ -18,7 +18,6 @@ from typing import Callable
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QButtonGroup,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -141,19 +140,17 @@ class OverviewPage(QWidget):
         self._grid.setSpacing(SPACING)
         self._cols = 0
 
-        self._chart = BarChart("words")
-        self._range = QButtonGroup(self)
-        self._range.setExclusive(True)
+        self._chart = BarChart()
         seg = QHBoxLayout()
         seg.setSpacing(6)
         for days in (7, 30):
             btn = QPushButton(f"{days} days")
             btn.setProperty("seg", True)
             btn.setCheckable(True)
+            btn.setAutoExclusive(True)  # siblings under one parent: checking one unchecks the other
             btn.setChecked(days == 7)
             btn.setAccessibleName(f"Show the last {days} days")
             btn.clicked.connect(lambda _=False, d=days: self._chart.set_days(d))
-            self._range.addButton(btn)
             seg.addWidget(btn)
         chart_head = QHBoxLayout()
         chart_head.addWidget(section("Words per day"), stretch=1)

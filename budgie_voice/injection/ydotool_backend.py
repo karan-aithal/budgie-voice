@@ -114,9 +114,6 @@ class YdotoolBackend(TextOutputBackend):
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, self._inject_sync, text)
 
-    async def cancel_session(self) -> None:
-        """No session state to discard."""
-
     async def end_session(self) -> None:
         """No session state to release."""
 

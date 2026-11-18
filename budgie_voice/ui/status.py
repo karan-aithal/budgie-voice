@@ -154,7 +154,7 @@ class RuntimeStatus:
         if state == "recording":
             self._started, self._stopped = now, None
             return
-        if state in ("finalizing", "transcribing"):
+        if state == "finalizing":
             if self._started is not None and self._stopped is None:
                 self._stopped = now
             return

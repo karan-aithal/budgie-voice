@@ -144,7 +144,7 @@ async def test_a_day_of_dictation_survives_a_restart_and_every_view_agrees(app, 
     history = HistoryPage(reopened, RuntimeStatus())
     history.refresh()
     table = _history_rows(history)
-    assert [r[5] for r in table] == ["Failed", "Completed", "Cancelled", "Completed", "Completed"]  # newest first
+    assert [r[5] for r in table] == ["Failed", "Completed, nothing typed", "Cancelled", "Completed", "Completed"]  # newest first
     assert sum(int(r[3].replace(",", "")) for r in table) == total.words == 14
     assert sum(int(r[4].replace(",", "")) for r in table) == 33 + 21 + 22
     assert history._summary.text() == "Showing 5 of 5 dictations"

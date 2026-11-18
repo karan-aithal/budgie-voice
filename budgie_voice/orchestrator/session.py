@@ -2,7 +2,7 @@
 
 Lifecycle::
 
-    IDLE → STARTING → RECORDING → TRANSCRIBING → FINALIZING → COMPLETED → IDLE
+    IDLE → STARTING → RECORDING → FINALIZING → COMPLETED → IDLE
     Any active state → CANCELLED → IDLE
     Any state        → ERROR     → IDLE
 """
@@ -23,7 +23,6 @@ class SessionState(StrEnum):
     IDLE = "idle"
     STARTING = "starting"
     RECORDING = "recording"
-    TRANSCRIBING = "transcribing"
     FINALIZING = "finalizing"
     COMPLETED = "completed"
     CANCELLED = "cancelled"
@@ -34,7 +33,6 @@ _ACTIVE = frozenset(
     {
         SessionState.STARTING,
         SessionState.RECORDING,
-        SessionState.TRANSCRIBING,
         SessionState.FINALIZING,
     }
 )
@@ -83,8 +81,8 @@ class DictationSession:
         await self._emit(SessionState.RECORDING)
 
     async def to_finalizing(self) -> None:
-        """RECORDING | TRANSCRIBING → FINALIZING."""
-        if self._state not in (SessionState.RECORDING, SessionState.TRANSCRIBING):
+        """RECORDING → FINALIZING."""
+        if self._state != SessionState.RECORDING:
             raise BudgieSessionError(
                 f"Cannot finalize from state {self._state!r}"
             )
