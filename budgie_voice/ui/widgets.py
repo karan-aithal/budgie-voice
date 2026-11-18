@@ -9,6 +9,7 @@ from PyQt6.QtCore import QRectF, QSize, Qt, QVariantAnimation
 from PyQt6.QtGui import QColor, QFont, QFontMetrics, QPainter, QPalette, QPen
 from PyQt6.QtWidgets import QCheckBox, QFrame, QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
+from budgie_voice.ui.icons import pixmap
 from budgie_voice.ui.status import Status
 from budgie_voice.ui.style import app_icon, mix, ui_font
 from budgie_voice.ui.theme import status_color
@@ -116,9 +117,71 @@ class StatusRow(QWidget):
 
     def set_status(self, status: Status, detail: str = "", word: str | None = None) -> None:
         """*word* replaces the status name for results that are not component states ("Match")."""
+        self.status = status
         self._dot.set_status(status)
         label = word or status.value
         self._value.setText(f"{label} — {detail}" if detail else label)
+
+
+class Glyph(QWidget):
+    """A Lucide icon in the palette's muted text colour, drawn at paint time so it follows the theme."""
+
+    def __init__(self, name: str, size: int = 18) -> None:
+        super().__init__()
+        self._name, self._size = name, size
+        self.setFixedSize(size, size)
+
+    def paintEvent(self, event) -> None:  # noqa: N802, ARG002
+        color = self.palette().color(QPalette.ColorRole.PlaceholderText)
+        QPainter(self).drawPixmap(0, 0, pixmap(self._name, color, self._size))
+
+
+class Chip(QWidget):
+    """``● Ready``: a status dot with its word, for a one-glance state."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._label = QLabel()
+        self._label.setFont(ui_font(13, _Medium))
+        self._dot = _Dot(Status.UNKNOWN, QFontMetrics(self._label.font()).height())
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(8)
+        row.addWidget(self._dot)
+        row.addWidget(self._label)
+
+    def set_status(self, status: Status, text: str) -> None:
+        self._dot.set_status(status)
+        self._label.setText(text)
+
+
+class StatCard(QFrame):
+    """Icon + title, a big value, and what the value means. Styled by ``QFrame#card`` in ui.style."""
+
+    def __init__(self, icon: str, title: str, desc: str) -> None:
+        super().__init__()
+        self.setObjectName("card")
+        # Equal columns whatever the text: width comes from the grid's stretch, not from each card's hint.
+        self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self._value = QLabel("—")
+        self._value.setFont(ui_font(26, _Medium))
+        self._value.setWordWrap(True)  # a long value wraps between its words instead of being clipped
+        head = QHBoxLayout()
+        head.setSpacing(8)
+        head.addWidget(Glyph(icon, 16))
+        head.addWidget(muted(title), stretch=1)
+        col = QVBoxLayout(self)
+        col.setContentsMargins(16, 14, 16, 14)
+        col.setSpacing(6)
+        col.addLayout(head)
+        col.addWidget(self._value)
+        col.addWidget(muted(desc))
+
+    def set_value(self, text: str) -> None:
+        self._value.setText(text)
+
+    def value(self) -> str:
+        return self._value.text()
 
 
 def brand(left: int = 0) -> QWidget:

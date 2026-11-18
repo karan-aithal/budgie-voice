@@ -106,6 +106,7 @@ class DictationService:
         self._progressive_warned = False
         self._typed = 0
         self._typed_chars = 0
+        self._typed_words = 0
         self._type_failed = False
         self._type_lock = asyncio.Lock()
         self._type_tasks: set[asyncio.Task[None]] = set()
@@ -261,6 +262,15 @@ class DictationService:
         return self._typed_chars
 
     @property
+    def typed_words(self) -> int:
+        """Words typed into the target by the current or last session (0 if none).
+
+        Counted exactly where ``typed_chars`` is, so only text that was really committed counts.
+        Command mode counts 0: the typed text is a rewrite, not words the user dictated. A number only.
+        """
+        return self._typed_words
+
+    @property
     def state(self) -> SessionState:
         return self._session.state
 
@@ -279,7 +289,7 @@ class DictationService:
 
         self._pending.clear()
         self._audio_buf.clear()
-        self._typed = self._typed_chars = 0
+        self._typed = self._typed_chars = self._typed_words = 0
         self._type_failed = False
         self._refresh_hotwords()  # picks up dictionary edits without a restart
         self._profile = self._resolve_profile(window_id)
@@ -352,6 +362,7 @@ class DictationService:
                     await self._injector.start_session(self._session.target_window_id)
                     await self._injector.commit_text(combined)
                     self._typed_chars = len(combined)  # same counter progressive typing keeps
+                    self._typed_words = 0 if sel is not None else len(combined.split())
                     await self._injector.end_session()
                     # heard vs combined diff = the training signal: what ASR got
                     # wrong and what the user actually meant. Only when the user edited
@@ -447,6 +458,7 @@ class DictationService:
                 )
                 return
             self._typed_chars += len(text)
+            self._typed_words += len(text.split())
             _LOG.info("Progressive: typed %d chars (%d so far)", len(text), self._typed_chars)
             _LOG.debug("Progressive typed: %r", text[:80])
 

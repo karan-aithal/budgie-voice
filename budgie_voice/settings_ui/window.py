@@ -39,8 +39,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from budgie_voice.config.settings import Settings
+from budgie_voice.analytics.store import HistoryStore
+from budgie_voice.config.settings import LlmSettings, Settings
 from budgie_voice.inference.backends.registry import available_backends, models_for
+from budgie_voice.settings_ui.history import HistoryPage
 from budgie_voice.settings_ui.overview import OverviewPage
 from budgie_voice.ui.status import RuntimeStatus
 from budgie_voice.ui.icons import pixmap
@@ -88,14 +90,28 @@ class _HotkeyEdit(QLineEdit):
 
 
 class _Pages(QStackedWidget):
-    """Stack that never asks the scroll area for more width than it has.
+    """Stack that never asks for more width than it has.
 
-    QScrollArea sizes its widget from sizeHint(), and a word-wrapped QLabel reports the width of
-    its whole text there, which pushed every page past the window's right edge.
+    A word-wrapped QLabel reports the width of its whole text as its sizeHint, which pushed every
+    page past the window's right edge.
     """
 
     def sizeHint(self) -> QSize:  # noqa: N802
         return QSize(0, super().sizeHint().height())
+
+
+# Only these pages are long enough to scroll. Every other page fits the window, whose minimum
+# height is taken from them, so they never show a scroll bar.
+_SCROLLING = ("Overview", "Dictation History")
+
+
+def _scrolling(page: QWidget) -> QScrollArea:
+    area = QScrollArea()
+    area.setWidgetResizable(True)
+    area.setFrameShape(QFrame.Shape.NoFrame)
+    area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+    area.setWidget(page)
+    return area
 
 
 def _form() -> tuple[QWidget, QFormLayout]:
@@ -119,16 +135,17 @@ class SettingsWindow(QDialog):
         parent: Optional Qt parent widget.
         status: Runtime facts for the Overview page. Omitted when Settings runs
             standalone: the Overview then reports what it cannot know as Unknown.
+        history: Saved dictation history for the Overview's statistics (None: shown as unavailable).
     """
 
     def __init__(
-        self, settings: Settings, parent: object = None, status: RuntimeStatus | None = None
+        self, settings: Settings, parent: object = None, status: RuntimeStatus | None = None,
+        history: HistoryStore | None = None,
     ) -> None:
         super().__init__(parent)  # type: ignore[call-arg]
         self._settings = settings
         self.setWindowTitle("Budgie — Settings")
-        self.setMinimumSize(660, 460)
-        self.resize(780, 540)
+        self.setMinimumWidth(660)  # the minimum height comes from the pages that do not scroll
 
         # Pages that own widgets other code reads (combos, checkboxes) are built first;
         # the Overview needs the mic list the Audio page populates.
@@ -139,17 +156,21 @@ class SettingsWindow(QDialog):
             section("Inference"), self._inference_form(),
         )
         speaker = page(heading("Speaker Verification"), self._speaker_form())
-        postproc = page(heading("Post-processing"), self._postproc_form())
+        postproc = page(heading("Post-processing"), self._postproc_form(),
+                        section("LM Studio"), self._llm_form())
         appearance = page(
             heading("Appearance"),
             self._theme_form(),
             section("Recording overlay"), self._indicator_form(),
         )
-        self._overview = OverviewPage(settings, status or RuntimeStatus(), self._mic_label)
+        runtime = status or RuntimeStatus()
+        self._overview = OverviewPage(settings, runtime, self._mic_label, history)
+        self._history = HistoryPage(history, runtime)
 
         pages = [
-            ("Overview", "layout-dashboard", self._overview), ("Activation", "keyboard", activation),
-            ("Audio & Inference", "audio-lines", audio), ("Speaker Verification", "shield-check", speaker),
+            ("Overview", "layout-dashboard", self._overview), ("Dictation History", "history", self._history),
+            ("Audio & Inference", "audio-lines", audio), ("Activation", "keyboard", activation),
+            ("Speaker Verification", "shield-check", speaker),
             ("Post-processing", "sparkles", postproc), ("Appearance", "sun-moon", appearance),
         ]
         self._stack = _Pages()
@@ -164,14 +185,9 @@ class SettingsWindow(QDialog):
             item = QListWidgetItem(name)
             set_icon(item, icon_name)
             self._nav.addItem(item)
-            self._stack.addWidget(widget)
+            self._stack.addWidget(_scrolling(widget) if name in _SCROLLING else widget)
         self._nav.currentRowChanged.connect(self._on_nav)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        scroll.setWidget(self._stack)
+        self._overview.view_all.connect(lambda: self._nav.setCurrentRow(1))  # Dictation History
 
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.VLine)
@@ -188,7 +204,7 @@ class SettingsWindow(QDialog):
         body.setSpacing(0)
         body.addLayout(side)
         body.addWidget(divider)
-        body.addWidget(scroll, stretch=1)
+        body.addWidget(self._stack, stretch=1)
 
         lock = QLabel()
         lock.setPixmap(pixmap("lock", QColor("#8e8e93"), 14))  # muted grey, reads on light and dark
@@ -216,12 +232,15 @@ class SettingsWindow(QDialog):
         outer.addLayout(footer)
 
         apply_scope(self)  # font, stylesheet, icon colours: this window only
+        self.resize(780, max(540, self.minimumSizeHint().height()))
         self._nav.setCurrentRow(0)  # opens on Overview (and runs its first refresh)
 
     def _on_nav(self, row: int) -> None:
         self._stack.setCurrentIndex(row)
         if row == 0:
             self._overview.refresh()
+        elif row == 1:
+            self._history.refresh()  # the saved list may have grown since it was last shown
 
     # ------------------------------------------------------------------
     # Page builders
@@ -435,6 +454,25 @@ class SettingsWindow(QDialog):
             fl.addRow(chk)
         return box
 
+    def _llm_form(self) -> QWidget:
+        box, fl = _form()
+        self._llm_chk = Switch("Use LM Studio to polish text")
+        self._llm_chk.setChecked(self._settings.llm.enabled)
+        fl.addRow(self._llm_chk)
+
+        default_url = LlmSettings().url
+        self._llm_url = QLineEdit("" if self._settings.llm.url == default_url else self._settings.llm.url)
+        self._llm_url.setPlaceholderText(default_url)  # blank = the default, and no key is written
+        self._llm_url.setAccessibleName("LM Studio server URL")
+        fl.addRow("Server URL:", self._llm_url)
+        self._llm_model = QLineEdit(self._settings.llm.model)
+        self._llm_model.setPlaceholderText("e.g. qwen/qwen3.5-4b")
+        self._llm_model.setAccessibleName("LM Studio model")
+        fl.addRow("Model:", self._llm_model)
+        fl.addRow(muted("The model id is the one LM Studio lists for its server. Also turns on command mode. "
+                        "Overview shows whether the server and model are reachable."))
+        return box
+
     def _theme_form(self) -> QWidget:
         box, fl = _form()
         self._theme_combo = QComboBox()
@@ -497,6 +535,7 @@ class SettingsWindow(QDialog):
                 "auto_capitalize": self._cap_chk.isChecked(),
                 "language_cleanup": self._lang_chk.isChecked(),
             },
+            "llm": {"enabled": self._llm_chk.isChecked()},
             "indicator": {"visualizer": self._visualizer_combo.currentText()},
             "ui": {"theme": self._theme_combo.currentData()},
         }
@@ -507,6 +546,13 @@ class SettingsWindow(QDialog):
                 current = base[section_name] = {}
             current.update(values)
         base["audio"].pop("device", None)  # superseded by audio.devices
+        for key, edit in (("url", self._llm_url), ("model", self._llm_model)):
+            text = edit.text().strip()
+            if text:
+                base["llm"][key] = text
+            elif getattr(self._settings.llm, key) != getattr(LlmSettings(), key):
+                base["llm"].pop(key, None)  # a custom value was cleared: back to the default
+            # else untouched: a blank field never writes, and never deletes what it did not set
 
         _CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with _CONFIG_PATH.open("w", encoding="utf-8") as fh:

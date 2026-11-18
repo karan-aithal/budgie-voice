@@ -84,6 +84,9 @@ QPushButton[primary="true"]:pressed { background: $hl_press; border-color: $hl_p
 QPushButton[primary="true"]:focus { border: 2px solid $ht; padding: 3px 13px; }
 QPushButton[primary="true"]:disabled { background: $btn_off; color: $disabled; border-color: $border_off; }
 
+QPushButton[seg="true"] { padding: 3px 12px; min-height: 18px; }
+QPushButton[seg="true"]:checked { background: $hl; color: $ht; border-color: $hl; }
+
 QLineEdit, QComboBox { background: $base; color: $text; border: 1px solid $border; border-radius: ${rc}px;
   padding: 5px 12px; min-height: 20px; selection-background-color: $hl; selection-color: $ht; }
 QLineEdit:focus, QComboBox:focus, QComboBox:on { border: 2px solid $hl; padding: 4px 11px; }

@@ -18,6 +18,8 @@ from typing import Callable
 
 from budgie_voice.audio.adapter import AudioAdapter
 from budgie_voice.audio.spectrum import AudioLevel
+from budgie_voice.analytics.recorder import SessionRecorder
+from budgie_voice.analytics.store import HistoryStore
 from budgie_voice.config.settings import Settings, load_settings
 from budgie_voice.dbus.service import BudgieDBusService
 from budgie_voice.inference.backends.base import InferenceBackend
@@ -227,6 +229,12 @@ async def main_async() -> bool:
 
     dbus_svc = BudgieDBusService(dict_svc, loop, on_reload=lambda: dispatch(_reload(), loop))
     _state_cbs.append(lambda s: dbus_svc.emit_state_changed(str(s)))
+    # Saved history: one metadata row per dictation (when, how long, how many words/characters; never
+    # any text). Registered BEFORE the status callback below: the Overview refreshes from that one
+    # and must find the row already written. The recorder swallows its own errors.
+    history = HistoryStore(Path.home() / ".local" / "share" / "budgie-voice" / "history.db")
+    recorder = SessionRecorder(history)
+    _state_cbs.append(lambda s: recorder.on_state(str(s), dict_svc.typed_chars, dict_svc.typed_words))
     # Activity history: the state change plus how many characters were typed, never any text.
     # (on_session_state swallows its own errors: nothing here may stop the tray/recorder callbacks.)
     _state_cbs.append(lambda s: status.on_session_state(str(s), dict_svc.typed_chars))
@@ -278,7 +286,7 @@ async def main_async() -> bool:
         tray = TrayIcon(
             on_toggle=lambda: dict_svc.toggle("tray"),
             on_enroll=lambda: _open_once("enroll", lambda: EnrollmentWizard(verifier)),
-            on_settings=lambda: _open_once("settings", lambda: SettingsWindow(dict_svc.settings, status=status)),
+            on_settings=lambda: _open_once("settings", lambda: SettingsWindow(dict_svc.settings, status=status, history=history)),
             on_quit=stop_event.set,
             on_restart=_request_restart,
             get_last_text=lambda: dict_svc.last_transcript,

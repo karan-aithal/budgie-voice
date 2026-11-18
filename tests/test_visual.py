@@ -103,7 +103,7 @@ def test_settings_window_restyles_live_when_the_palette_changes(app) -> None:
 
 def test_settings_chrome_has_icons_and_a_primary_save(app) -> None:
     w = SettingsWindow(Settings(), status=RuntimeStatus())
-    assert w._nav.count() == 6 and all(not w._nav.item(i).icon().isNull() for i in range(6))
+    assert w._nav.count() == 7 and all(not w._nav.item(i).icon().isNull() for i in range(7))
     primary = [b for b in w.findChildren(QPushButton) if b.property("primary")]
     assert [b.text().replace("&", "") for b in primary] == ["Save"] and not primary[0].icon().isNull()
     assert all(isinstance(c, Switch) for c in (w._denoise_chk, w._speaker_chk, w._num_chk))

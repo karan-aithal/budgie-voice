@@ -13,6 +13,8 @@ import gc
 import os
 import signal
 import subprocess
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -25,6 +27,7 @@ pytest.importorskip("PyQt6.QtWidgets")
 from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 from budgie_voice import main  # noqa: E402
+from budgie_voice.analytics.store import HistoryStore  # noqa: E402
 from budgie_voice.indicator import tray as tray_mod  # noqa: E402
 from budgie_voice.indicator.tray import TrayIcon  # noqa: E402
 from budgie_voice.config.settings import Settings  # noqa: E402
@@ -142,6 +145,8 @@ def _patch_main(monkeypatch, current: dict, fake_load, notices) -> None:
     monkeypatch.setattr(main, "HotkeyManager", _Hotkey)
     monkeypatch.setattr(main, "_make_injector", lambda s: main._NullBackend())
     monkeypatch.setattr(main, "RuntimeStatus", _Status)
+    # The history file is an edge too: a test run must never create one in the real home directory.
+    monkeypatch.setattr(main, "HistoryStore", lambda path: HistoryStore(Path(tempfile.mkdtemp()) / "history.db"))
     monkeypatch.setattr(dictation_service, "_notify", notices)
 
 

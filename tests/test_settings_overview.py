@@ -350,9 +350,9 @@ def cfg_path(tmp_path, monkeypatch):
 def test_settings_opens_on_overview_with_the_approved_sections(qapp, cfg_path) -> None:
     w = SettingsWindow(Settings())
     names = [w._nav.item(i).text() for i in range(w._nav.count())]
-    assert names == ["Overview", "Activation", "Audio & Inference", "Speaker Verification",
-                     "Post-processing", "Appearance"]
-    assert w._nav.currentRow() == 0 and w._stack.currentWidget() is w._overview
+    assert names == ["Overview", "Dictation History", "Audio & Inference", "Activation",
+                     "Speaker Verification", "Post-processing", "Appearance"]
+    assert w._nav.currentRow() == 0 and w._stack.currentWidget().widget() is w._overview  # inside its scroll area
     assert [w._theme_combo.itemText(i) for i in range(3)] == ["System", "Light", "Dark"]
     assert w._theme_combo.currentData() == "system"
     assert w._visualizer_combo.count() == 2  # Recording overlay setting kept under Appearance
@@ -419,6 +419,64 @@ def test_save_preserves_unknown_keys_and_unexposed_settings(qapp, cfg_path, monk
     assert load_settings(cfg_path).ui.theme == "dark"
 
 
+def test_lm_studio_switch_reads_and_saves_llm_enabled_and_keeps_the_rest(qapp, cfg_path, monkeypatch) -> None:
+    from budgie_voice.ui.widgets import Switch  # noqa: PLC0415
+
+    monkeypatch.setattr(window_mod, "sync_theme", lambda app, mode: None)
+    llm = {"enabled": False, "url": "http://127.0.0.1:1234/v1", "model": "qwen/qwen3.5-4b", "min_words": 12}
+    cfg_path.write_text(yaml.dump({"llm": llm}))
+
+    w = SettingsWindow(load_settings(cfg_path))
+    assert isinstance(w._llm_chk, Switch) and not w._llm_chk.isChecked()
+    w._llm_chk.setChecked(True)
+    w._save()
+    saved = yaml.safe_load(cfg_path.read_text())["llm"]
+    assert saved == {**llm, "enabled": True}                      # url, model and the rest are untouched
+    assert load_settings(cfg_path).llm.enabled is True
+
+    w2 = SettingsWindow(load_settings(cfg_path))                  # the switch shows the saved state
+    assert w2._llm_chk.isChecked()
+    w2._llm_chk.setChecked(False)
+    w2._save()
+    assert yaml.safe_load(cfg_path.read_text())["llm"] == llm
+    assert load_settings(cfg_path).llm.enabled is False
+
+
+def test_lm_studio_url_and_model_fields_edit_save_and_clear(qapp, cfg_path, monkeypatch) -> None:
+    from budgie_voice.config.settings import LlmSettings  # noqa: PLC0415
+
+    monkeypatch.setattr(window_mod, "sync_theme", lambda app, mode: None)
+    cfg_path.write_text(yaml.dump({"llm": {"enabled": True, "min_words": 12}}))
+
+    w = SettingsWindow(load_settings(cfg_path))                   # nothing configured yet
+    assert w._llm_model.text() == "" and w._llm_url.text() == ""  # the default URL is a placeholder, not a value
+    assert w._llm_url.placeholderText() == LlmSettings().url
+    w._llm_url.setText("  http://localhost:1235/v1 ")
+    w._llm_model.setText("qwen/qwen3.5-4b")
+    w._save()
+    saved = yaml.safe_load(cfg_path.read_text())["llm"]
+    assert saved == {"enabled": True, "min_words": 12, "url": "http://localhost:1235/v1", "model": "qwen/qwen3.5-4b"}
+    cfg = load_settings(cfg_path).llm
+    assert (cfg.url, cfg.model) == ("http://localhost:1235/v1", "qwen/qwen3.5-4b")
+
+    w2 = SettingsWindow(load_settings(cfg_path))                  # shows what was saved
+    assert (w2._llm_url.text(), w2._llm_model.text()) == ("http://localhost:1235/v1", "qwen/qwen3.5-4b")
+    w2._llm_url.clear()
+    w2._llm_model.clear()
+    w2._save()                                                    # clearing returns both to their defaults
+    assert yaml.safe_load(cfg_path.read_text())["llm"] == {"enabled": True, "min_words": 12}
+
+
+def test_a_blank_lm_studio_field_never_creates_or_deletes_keys(qapp, cfg_path, monkeypatch) -> None:
+    monkeypatch.setattr(window_mod, "sync_theme", lambda app, mode: None)
+    cfg_path.write_text(yaml.dump({"vad": {"aggressiveness": 3}}))                 # no llm section at all
+    SettingsWindow(load_settings(cfg_path))._save()
+    assert yaml.safe_load(cfg_path.read_text())["llm"] == {"enabled": False}       # no url, no model written
+    cfg_path.write_text(yaml.dump({"llm": {"enabled": True, "url": LlmSettings().url, "model": ""}}))
+    SettingsWindow(load_settings(cfg_path))._save()                                # explicit defaults stay as written
+    assert yaml.safe_load(cfg_path.read_text())["llm"] == {"enabled": True, "url": LlmSettings().url, "model": ""}
+
+
 def test_save_without_changes_is_stable(qapp, cfg_path, monkeypatch) -> None:
     monkeypatch.setattr(window_mod, "sync_theme", lambda app, mode: None)
     cfg_path.write_text(yaml.dump({"vad": {"aggressiveness": 3}, "ui": {"theme": "light"}}))
@@ -471,7 +529,7 @@ def test_closed_settings_windows_do_not_pile_up_as_subscribers(qapp, cfg_path) -
     st = RuntimeStatus()
     for _ in range(5):
         w = SettingsWindow(Settings(), status=st)
-        assert len(st._subs) == 1
+        assert len(st._subs) == 2  # the Overview and the History page, both held weakly
         del w
         for _ in range(3):
             gc.collect()
