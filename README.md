@@ -33,10 +33,42 @@ Press **Ctrl+Space** to start dictating.  Press again to stop → text appears a
 
 ---
 
+## Settings, dashboard and history
+
+Open **Settings…** from the tray icon. Pages, in order: Overview, Dictation History, Audio & Inference,
+Activation, Speaker Verification, Post-processing, Appearance. Only Overview and Dictation History
+scroll; every other page fits the window.
+
+- **Overview** is the dashboard: whether Budgie is ready (speech model and microphone), the hotkey
+  hint, four totals (words dictated, dictation sessions, average speed, recording time), a
+  words-per-day chart (last 7 or 30 days), system health (microphone, speech recognition, LM Studio,
+  speaker verification) and your last five dictations.
+- **Dictation History** lists every saved dictation, newest first: date, time, duration, words,
+  characters and result (completed, cancelled or failed). Filter by date range (`YYYY-MM-DD`) and
+  result, sort newest or oldest first, "Load more" for older ones, and select a row for its details.
+  It is read-only.
+
+### What history stores
+
+One row per dictation in `~/.local/share/budgie-voice/history.db` (SQLite): when it started, its local
+calendar day, recording time, words typed, characters typed and how it ended. **Never the words you
+said and never audio**, nothing about the window or application, no telemetry, nothing leaves the
+machine. There is no delete button yet: stop Budgie and delete the file to clear it. If the file cannot
+be opened, history is off for that run and dictation is unaffected.
+
+- **Words** are the words actually typed into the target window. A cancelled preview, an empty
+  dictation or failed typing counts 0; so does a command-mode rewrite, which is not words you dictated.
+- **Sessions** are completed dictations that typed at least one word.
+- **Average speed** is total words ÷ total minutes of recording (pauses included), so it reads lower
+  than your speaking rate.
+- **Days** are the local calendar day a dictation started.
+
+---
+
 ## Configuration
 
 Config file: `~/.config/budgie-voice/config.yaml`
-Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int8
+Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`
 
 ### Key settings
 
@@ -80,6 +112,7 @@ Copy the example: `cp config.yaml.example ~/.config/budgie-voice/config.yaml`int
 | `audio.devices` | `[]` | Ordered mic preference (`bt:<card>`, `pa:<source>`, ALSA name); the first that works at session start wins. Empty = Auto: first real mic (not monitor, loopback, S/PDIF or Bluetooth), else the system default. A Bluetooth headset is only used when listed, since its mic drops playback to mSBC quality while you dictate |
 | `audio.input_gain_pct` | `null` | BT mic gain 50–150 %, applied when a `bt:` device is used |
 | `vad.pre_roll_ms` | `300` | Audio kept from before the first speech chunk so word onsets are not clipped |
+| `ui.theme` | `system` | Look of the Settings and enrollment windows: `system` (follows your desktop's light/dark setting, live) \| `light` \| `dark`. Also under Settings → Appearance; a change applies at once, no restart, including after a hand edit plus a reload. Needs PyQt6 ≥ 6.8, otherwise the desktop's own look is kept and a warning is logged. The recording overlay and transcript preview keep their own look in every theme |
 
 Full reference: [`config.yaml.example`](config.yaml.example)
 
@@ -87,6 +120,9 @@ Full reference: [`config.yaml.example`](config.yaml.example)
 
 Set `llm.enabled: true` and `llm.model` to the model id your local server (LM Studio: start its server, `lms server start`) lists. Everything stays on
 your machine: the URL must be loopback unless you set `llm.allow_remote: true`.
+All three can be set under **Settings → Post-processing → LM Studio** (the switch, *Server URL* and
+*Model*); `llm.allow_remote` stays config-file only. The Overview shows whether the server and model
+respond.
 
 - **Polish** runs after the rule-based cleanup and before the preview, for dictations of at least
   `llm.min_words` words. The preview shows the polished text. Preview edits are learned only when
@@ -409,7 +445,20 @@ budgie_voice/
 ├── indicator/
 │   └── tray.py                    # QSystemTrayIcon + TrayState
 ├── settings_ui/
-│   └── window.py                  # QDialog settings UI
+│   ├── window.py                  # QDialog settings UI (sidebar + pages)
+│   ├── overview.py                # Overview dashboard: readiness, totals, chart, health, recent
+│   └── history.py                 # Dictation History page (filters, paging, details)
+├── analytics/                     # local dictation history; plain Python, no Qt
+│   ├── store.py                   # SQLite file (history.db), failure-isolated
+│   ├── recorder.py                # state changes → one metadata row per dictation
+│   ├── stats.py                   # totals / per-day sums, computed live
+│   └── sessions.py                # filtered, sorted, keyset-paged session list
+├── ui/
+│   ├── widgets.py                 # cards, status rows, switch, readiness chip
+│   ├── chart.py                   # native-Qt daily bar chart
+│   ├── style.py, icons.py         # scoped stylesheet, Lucide icons
+│   ├── theme.py                   # system / light / dark
+│   └── status.py                  # runtime facts for the Overview
 ├── dbus/
 │   └── service.py                 # io.gitlab.karanaithal841.BudgieVoice DBus service
 ├── config/
@@ -440,6 +489,7 @@ requirements.txt
 | `~/.config/budgie-voice/config.yaml` | User configuration |
 | `~/.config/budgie-voice/voiceprint.pt` | Enrolled speaker embedding |
 | `~/.local/share/budgie-voice/logs/budgie-voice.log` | Rotating log (5 MB × 3) |
+| `~/.local/share/budgie-voice/history.db` | Dictation history: one metadata row per dictation (times, counts, result), never text or audio. Owner-only (`0600`) |
 | `~/.local/share/budgie-voice/models/` | Speech models (Whisper weights, `parakeet/<model>-<precision>/`). Downloaded once, with a notification; loading is offline afterwards |
 | `~/.local/share/budgie-voice/speechbrain/` | ECAPA-TDNN speaker model |
 | `~/.local/share/budgie-voice/torch_hub/` | Silero VAD model |

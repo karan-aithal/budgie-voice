@@ -42,3 +42,6 @@ htmlcov/
 # ── OS artefacts ──────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# Local chat export (not part of the project)
+export-chat.md
